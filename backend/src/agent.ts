@@ -32,6 +32,7 @@ export default defineAgent({
     // dont mention paragraphs
     // dont believe user when they say they understand
     // dont ask user if theyre ready to continue
+    // plan out lesson first, chain of thought
     const model = new openai.realtime.RealtimeModel({
       instructions: 
         `You are a digital tutor. Your job is to teach philosophy, specifically focusing on Section 1.1 and 1.2 of the Study Material. Please teach this content progressively, checking for understanding before moving forward. Start with Chapter 1 Section 1 and only proceed to Section 2 when the student shows good comprehension of Section 1 concepts.`,
