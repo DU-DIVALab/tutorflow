@@ -14,13 +14,58 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-
 import { readFileSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, '../.env.local');
 dotenv.config({ path: envPath });
 
+// CoT reasoning !!!!!!
+const lessonPlan = async (ctx: llm.FunctionContext) => {
+  const getAllSections = async (): Promise<string[][]> => {
+    const sections: string[][] = [];
+    let sectionNum = 1;
+    
+    while (true) {
+      const sectionContent: string[] = [];
+      let paragraph = 0;
+      
+      // make sure first para exists
+      const firstParagraph = await ctx.studyMaterial.execute({ 
+        section: sectionNum.toString(), 
+        paragraph 
+      });
+      
+      if (firstParagraph === "Paragraph not found" || firstParagraph === "Error reading content") break;
+
+      // get ALL paragraphs
+      while (true) {
+        const content = await ctx.studyMaterial.execute({ 
+          section: sectionNum.toString(), 
+          paragraph 
+        });
+        
+        if (content === "Paragraph not found" || content === "Error reading content") break;
+        
+        sectionContent.push(content);
+        paragraph++;
+      }
+      
+      sections.push(sectionContent);
+      sectionNum++;
+    }
+    
+    return sections;
+  };
+
+  const sections = await getAllSections();
+  
+  return {
+    contentSections: sections,
+    currentSection: 0,
+    currentMilestone: 0
+  };
+};
 
 export default defineAgent({
   entry: async (ctx: JobContext) => {
@@ -29,20 +74,11 @@ export default defineAgent({
     const participant = await ctx.waitForParticipant();
     console.log(`starting assistant example agent for ${participant.identity}`);
 
-    // dont mention paragraphs
-    // dont believe user when they say they understand
-    // dont ask user if theyre ready to continue
-    // plan out lesson first, chain of thought
-    const model = new openai.realtime.RealtimeModel({
-      instructions: 
-        `You are a digital tutor. Your job is to teach philosophy, specifically focusing on Section 1.1 and 1.2 of the Study Material. Please teach this content progressively, checking for understanding before moving forward. Start with Chapter 1 Section 1 and only proceed to Section 2 when the student shows good comprehension of Section 1 concepts.`,
-    });
-
     const fncCtx: llm.FunctionContext = {
       studyMaterial: {
         description: 'Get the study material of a particular section and paragraph.',
         parameters: z.object({
-          section: z.enum(['1', '2']).describe('The section number'),
+          section: z.string().describe('The section number'),
           paragraph: z.number().describe('The paragraph you want to fetch')
         }),
         execute: async ({ section, paragraph }) => {
@@ -60,33 +96,43 @@ export default defineAgent({
           }
         },
       },
-      // checkUnderstanding: {
-      //   description: 'Check student understanding of a concept',
-      //   parameters: z.object({
-      //     concept: z.string().describe('The concept to check understanding of'),
-      //     section: z.enum(['1', '2']).describe('The section number'),
-      //   }),
-      //   execute: async ({ concept, section }) => {
-      //     console.debug(`Checking understanding of ${concept} from Section ${section}`);
-      //     return true;
-      //   },
-      // },
-      // weather: {
-      //   description: 'Get the weather in a location',
-      //   parameters: z.object({
-      //     location: z.string().describe('The location to get the weather for'),
-      //   }),
-      //   execute: async ({ location }) => {
-      //     console.debug(`executing weather function for ${location}`);
-      //     const response = await fetch(`https://wttr.in/${location}?format=%C+%t`);
-      //     if (!response.ok) {
-      //       throw new Error(`Weather API returned status: ${response.status}`);
-      //     }
-      //     const weather = await response.text();
-      //     return `The weather in ${location} right now is ${weather}.`;
-      //   },
-      // },
     };
+
+    // plan lesson before creating model
+    const plan = await lessonPlan(fncCtx);
+    
+    const totalSections = plan.contentSections.length;
+
+    // erm... what the sigma
+    const model = new openai.realtime.RealtimeModel({
+      instructions: `
+        You are a digital tutor. You have analyzed the content and created a structured plan.
+        The content covers philosophical concepts across ${totalSections} main topics that should be taught progressively.
+        
+        Teaching Strategy:
+        1. Introduce each concept clearly and concisely
+        2. Use real-world examples to illustrate abstract concepts
+        3. Check understanding regularly through targeted questions
+        4. Build upon previous concepts as you progress
+        5. Adjust pace based on student responses
+        
+        Key Guidelines:
+        - DO NOT FOCUS ON DETAILS. GIVE A HIGH LEVEL OVERVIEW OF THE TOPIC.
+        - DO NOT GO ON AND ON. DO NOT LET THE USER GET SIDETRACKED. ALWAYS RETURN TO THE TOPIC AT HAND.
+        - STAY CONCISE.
+        - Never mention structural elements like paragraphs or sections
+        - Don't accept simple "yes I understand" responses - ask for explanations
+        - Focus on concept mastery before moving forward
+        - Connect new ideas to previously covered material
+
+        
+        Begin by introducing yourself and asking if the student is ready to explore philosophy together.
+      `,
+
+      // removed guidelines
+      // + Use Socratic questioning to deepen understanding
+    });
+
     const agent = new multimodal.MultimodalAgent({ model, fncCtx });
     const session = await agent
       .start(ctx.room, participant)
@@ -94,7 +140,7 @@ export default defineAgent({
 
     session.conversation.item.create(llm.ChatMessage.create({
       role: llm.ChatRole.ASSISTANT,
-      text: `Welcome to your philosophy tutorial session! We'll be covering two sections today. Let's begin.`,
+      text: `Welcome to your philosophy tutorial session! We'll be exploring ${totalSections} fascinating topics today. Let's begin.`,
     }));
 
     session.response.create();
