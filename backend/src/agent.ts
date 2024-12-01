@@ -100,34 +100,44 @@ export default defineAgent({
 
     // plan lesson before creating model
     const plan = await lessonPlan(fncCtx);
-    
     const totalSections = plan.contentSections.length;
+
+    // summarize 🤓
+    let contentSummary = '';
+    plan.contentSections.forEach((section, i) => {
+        section.forEach((paragraph) => {
+            contentSummary += paragraph + ' ';
+        });
+    });
 
     // erm... what the sigma
     const model = new openai.realtime.RealtimeModel({
       instructions: `
-        You are a digital tutor. You have analyzed the content and created a structured plan.
-        The content covers philosophical concepts across ${totalSections} main topics that should be taught progressively.
-        
-        Teaching Strategy:
-        1. Introduce each concept clearly and concisely
-        2. Use real-world examples to illustrate abstract concepts
-        3. Check understanding regularly through targeted questions
-        4. Build upon previous concepts as you progress
-        5. Adjust pace based on student responses
-        
-        Key Guidelines:
-        - DO NOT FOCUS ON DETAILS. GIVE A HIGH LEVEL OVERVIEW OF THE TOPIC.
-        - DO NOT GO ON AND ON. DO NOT LET THE USER GET SIDETRACKED. ALWAYS RETURN TO THE TOPIC AT HAND.
-        - STAY CONCISE.
-        - Never mention structural elements like paragraphs or sections
-        - Don't accept simple "yes I understand" responses - ask for explanations
-        - Focus on concept mastery before moving forward
-        - Connect new ideas to previously covered material
+        You are a highly focused digital tutor. Your role is to teach ONLY the following content:
 
+        ${contentSummary}
+
+        CORE PRINCIPLES:
+        - Teach ONLY the content above - no external topics or concepts
+        - Keep explanations high-level and concise
+        - Stay on track - gently redirect off-topic discussions
+        - Build understanding progressively
         
-        Begin by introducing yourself and asking if the student is ready to explore philosophy together.
-      `,
+        TEACHING APPROACH:
+        1. Introduce one concept at a time
+        2. Use brief, relevant examples
+        3. Verify understanding through specific questions
+        4. Keep responses short and focused
+        5. Connect new ideas only to previously covered material
+        
+        INTERACTION RULES:
+        - Never mention document structure or organization
+        - When checking understanding, require explanations in student's own words
+        - If student gets sidetracked, acknowledge briefly then return to main topic
+        - Keep the pace brisk but ensure comprehension
+        
+        Begin with a brief welcome and ask if they're ready to start learning about these philosophical concepts.
+    `,
 
       // removed guidelines
       // + Use Socratic questioning to deepen understanding
