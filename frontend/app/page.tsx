@@ -9,6 +9,7 @@ import {
   VoiceAssistantControlBar,
   AgentState,
   DisconnectButton,
+  useRoomContext,
 } from "@livekit/components-react";
 import { useCallback, useEffect, useState } from "react";
 import { MediaDeviceFailure } from "livekit-client";
@@ -18,56 +19,69 @@ import { CloseIcon } from "@/components/CloseIcon";
 import { useKrispNoiseFilter } from "@livekit/components-react/krisp";
 
 export default function Page() {
-  const [connectionDetails, updateConnectionDetails] = useState<
-    ConnectionDetails | undefined
-  >(undefined);
+  const [connectionDetails, updateConnectionDetails] = useState<ConnectionDetails | undefined>(undefined);
   const [agentState, setAgentState] = useState<AgentState>("disconnected");
+  const [participantId, setParticipantId] = useState<string>("");
+  const [showStartLearning, setShowStartLearning] = useState(false);
 
-  const onConnectButtonClicked = useCallback(async () => {
-    // Generate room connection details, including:
-    //   - A random Room name
-    //   - A random Participant name
-    //   - An Access Token to permit the participant to join the room
-    //   - The URL of the LiveKit server to connect to
-    //
-    // In real-world application, you would likely allow the user to specify their
-    // own participant name, and possibly to choose from existing rooms to join.
+  const handleParticipantSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && participantId.trim()) {
+      setShowStartLearning(true);
+    }
+  };
 
+
+
+  const onConnectButtonClicked = useCallback(async (participantId: string) => {
     const url = new URL(
-      process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ??
-      "/api/connection-details",
+      process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
       window.location.origin
     );
+    console.log(participantId);
     const response = await fetch(url.toString());
     const connectionDetailsData = await response.json();
     updateConnectionDetails(connectionDetailsData);
   }, []);
+
 
   return (
     <main
       data-lk-theme="default"
       className="h-full grid content-center bg-[var(--lk-bg)]"
     >
-      <LiveKitRoom
-        token={connectionDetails?.participantToken}
-        serverUrl={connectionDetails?.serverUrl}
-        connect={connectionDetails !== undefined}
-        audio={true}
-        video={false}
-        onMediaDeviceFailure={onDeviceFailure}
-        onDisconnected={() => {
-          updateConnectionDetails(undefined);
-        }}
-        className="grid grid-rows-[2fr_1fr] items-center"
-      >
-        <SimpleVoiceAssistant onStateChange={setAgentState} />
-        <ControlBar
-          onConnectButtonClicked={onConnectButtonClicked}
-          agentState={agentState}
-        />
-        <RoomAudioRenderer />
-        <NoAgentNotification state={agentState} />
-      </LiveKitRoom>
+      {!showStartLearning ? (
+        <div className="flex justify-center">
+          <input
+            type="text"
+            value={participantId}
+            onChange={(e) => setParticipantId(e.target.value)}
+            onKeyDown={handleParticipantSubmit}
+            placeholder="Enter participant ID"
+            className="border-b border-gray-300 focus:border-black outline-none px-4 py-2 text-center"
+          />
+        </div>
+      ) : (
+        <LiveKitRoom
+          token={connectionDetails?.participantToken}
+          serverUrl={connectionDetails?.serverUrl}
+          connect={connectionDetails !== undefined}
+          audio={true}
+          video={false}
+          onMediaDeviceFailure={onDeviceFailure}
+          onDisconnected={() => {
+            updateConnectionDetails(undefined);
+          }}
+          className="grid grid-rows-[2fr_1fr] items-center"
+        >
+          <SimpleVoiceAssistant onStateChange={setAgentState} />
+          <ControlBar
+            onConnectButtonClicked={() => onConnectButtonClicked(participantId)}
+            agentState={agentState}
+          />
+          <RoomAudioRenderer />
+          <NoAgentNotification state={agentState} />
+        </LiveKitRoom>
+      )}
     </main>
   );
 }
@@ -93,17 +107,21 @@ function SimpleVoiceAssistant(props: {
 }
 
 function ControlBar(props: {
-  onConnectButtonClicked: () => void;
+  onConnectButtonClicked: (participantId: string) => void;
   agentState: AgentState;
 }) {
-  /**
-   * Use Krisp background noise reduction when available.
-   * Note: This is only available on Scale plan, see {@link https://livekit.io/pricing | LiveKit Pricing} for more details.
-   */
+  const voiceAssistant = useVoiceAssistant();
   const krisp = useKrispNoiseFilter();
+  const room = useRoomContext(); 
+  
   useEffect(() => {
     krisp.setNoiseFilterEnabled(true);
   }, []);
+
+  const handleInterrupt = () => {
+    voiceAssistant.state = "listening";
+    room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: 'interrupt' })));
+  };
 
   return (
     <div className="relative h-[100px]">
@@ -115,7 +133,7 @@ function ControlBar(props: {
             exit={{ opacity: 0, top: "-10px" }}
             transition={{ duration: 1, ease: [0.09, 1.04, 0.245, 1.055] }}
             className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
-            onClick={() => props.onConnectButtonClicked()}
+            onClick={() => props.onConnectButtonClicked("test")}
           >
             Start Learning
           </motion.button>
@@ -129,12 +147,18 @@ function ControlBar(props: {
               animate={{ opacity: 1, top: 0 }}
               exit={{ opacity: 0, top: "-10px" }}
               transition={{ duration: 0.4, ease: [0.09, 1.04, 0.245, 1.055] }}
-              className="flex h-8 absolute left-1/2 -translate-x-1/2  justify-center"
+              className="flex h-8 absolute left-1/2 -translate-x-1/2 justify-center gap-2"
             >
               <VoiceAssistantControlBar controls={{ leave: false }} />
               <DisconnectButton>
                 <CloseIcon />
               </DisconnectButton>
+              <button
+                onClick={handleInterrupt}
+                className="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600"
+              >
+                Interrupt
+              </button>
             </motion.div>
           )}
       </AnimatePresence>

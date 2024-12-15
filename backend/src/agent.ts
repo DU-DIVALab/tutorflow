@@ -20,6 +20,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, '../.env.local');
 dotenv.config({ path: envPath });
 
+
+class TutorAgent extends multimodal.MultimodalAgent {
+    
+    public interrupt() {
+        // lol what a dumb hack
+       // this.emit('input_speech_started');
+        console.log('input_speech_started')
+    
+        setTimeout(() => {
+         // this.emit('input_speech_committed');
+          console.log('input_speech_committed')
+        }, 100);
+    }
+        // if (this._playing_handle) {
+        //   this._agent_playout.interrupt();
+        //   this.emit("agent_speech_interrupted", this._playing_handle);
+        // }
+}
+
+
 // CoT reasoning !!!!!!
 const lessonPlan = async (ctx: llm.FunctionContext) => {
   const getAllSections = async (): Promise<string[][]> => {
@@ -111,6 +131,15 @@ export default defineAgent({
     });
 
     // erm... what the sigma
+
+    /*
+      Which ways to users prefer to interact with agents?
+      Does interaction help learning?
+
+      User led interaction.
+      “Raise hands” button.
+      Agent led interaction.
+    */
     const model = new openai.realtime.RealtimeModel({
       instructions: `
         You are a highly focused digital tutor. Your role is to teach ONLY the following content:
@@ -133,6 +162,7 @@ export default defineAgent({
         INTERACTION RULES:
         - Never mention document structure or organization
         - When checking understanding, require explanations in student's own words
+        - Keep a conversational tone, do not sound like you're reading off a textbook
         - If student gets sidetracked, acknowledge briefly then return to main topic
         - Keep the pace brisk but ensure comprehension
         
@@ -143,10 +173,55 @@ export default defineAgent({
       // + Use Socratic questioning to deepen understanding
     });
 
-    const agent = new multimodal.MultimodalAgent({ model, fncCtx });
+    // prev multimodal.MultimodalAgent({})
+    const agent = new TutorAgent({ model, fncCtx });
+
     const session = await agent
-      .start(ctx.room, participant)
-      .then((session) => session as openai.realtime.RealtimeSession);
+    .start(ctx.room, participant)
+    .catch(err => {
+      console.error('Session start error:', err);
+      throw err;
+    })
+    .then((session) => session as openai.realtime.RealtimeSession)
+
+    console.log("this shouldnt be before 'start;'")
+
+
+    // interrupt. 
+    ctx.room.on('dataReceived', (payload) => {
+  
+      try {
+        const decoder = new TextDecoder();
+        const data = JSON.parse(decoder.decode(payload));
+        if (data.type === 'interrupt') {
+          console.log("INTERRUPTED");
+          
+          // Let user talk, and mute agent.
+          // UGH
+
+          // //agent.interrupt();
+          // // lol what a dumb hack
+
+          // // session.conversation.item.create(llm.ChatMessage.create({
+          // //   role: llm.ChatRole.ASSISTANT,
+          // //   text: "You've raised your hand, do you have a question?",
+          // // }));
+          // // session.response.create();
+          
+          // session.emit('input_speech_started', {itemId: randomUUID()});
+          // console.log('input_speech_started')
+      
+          // setTimeout(() => {
+          //   session.emit('input_speech_committed');
+          //   console.log('input_speech_committed')
+          // }, 100);
+          // // if this works lmfao
+       
+        }
+      } catch (e) {
+        console.error('Error parsing data message:', e);
+      }
+    });
 
     session.conversation.item.create(llm.ChatMessage.create({
       role: llm.ChatRole.ASSISTANT,
@@ -154,6 +229,8 @@ export default defineAgent({
     }));
 
     session.response.create();
+
+    
   },
 });
 
