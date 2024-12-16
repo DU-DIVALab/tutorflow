@@ -32,7 +32,10 @@ export default function Page() {
   
   const handleParticipantSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && participantId.trim()) {
-      setShowStartLearning(true);
+      let k = participantId.trim();
+      if (k.startsWith("ULX-") || k.startsWith("ALX-") || k.startsWith("URH-") ) {
+        setShowStartLearning(true);
+      }
     }
   };
 
@@ -86,6 +89,7 @@ export default function Page() {
           <ControlBar
             onConnectButtonClicked={() => onConnectButtonClicked(participantId)}
             agentState={agentState}
+            participantId={participantId}
           />
           <RoomAudioRenderer />
           <NoAgentNotification state={agentState} />
@@ -118,6 +122,7 @@ function SimpleVoiceAssistant(props: {
 function ControlBar(props: {
   onConnectButtonClicked: () => void;
   agentState: AgentState;
+  participantId: string
 }) {
   const voiceAssistant = useVoiceAssistant();
   const krisp = useKrispNoiseFilter();
@@ -162,12 +167,14 @@ function ControlBar(props: {
               <DisconnectButton>
                 <CloseIcon />
               </DisconnectButton>
-              <button
+              {props.participantId.trim().startsWith("URH-") && (
+                <button
                 onClick={handleInterrupt}
-                className="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600"
+                className="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-blue-600"
               >
-                Interrupt
+                🖐
               </button>
+            )}
             </motion.div>
           )}
       </AnimatePresence>
