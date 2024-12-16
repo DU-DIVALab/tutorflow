@@ -15,30 +15,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { readFileSync } from 'fs';
+import { TutorAgent } from './tutor_agent.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, '../.env.local');
 dotenv.config({ path: envPath });
-
-
-class TutorAgent extends multimodal.MultimodalAgent {
-    
-    public interrupt() {
-        // lol what a dumb hack
-       // this.emit('input_speech_started');
-        console.log('input_speech_started')
-    
-        setTimeout(() => {
-         // this.emit('input_speech_committed');
-          console.log('input_speech_committed')
-        }, 100);
-    }
-        // if (this._playing_handle) {
-        //   this._agent_playout.interrupt();
-        //   this.emit("agent_speech_interrupted", this._playing_handle);
-        // }
-}
-
 
 // CoT reasoning !!!!!!
 const lessonPlan = async (ctx: llm.FunctionContext) => {
@@ -92,7 +73,14 @@ export default defineAgent({
     await ctx.connect();
     console.log('waiting for participant');
     const participant = await ctx.waitForParticipant();
-    console.log(`starting assistant example agent for ${participant.identity}`);
+
+    // Get participantId from metadata
+    const metadata = JSON.parse(participant.metadata || '{}');
+    const participantId = metadata.participantId;
+
+    
+
+    console.log(`starting assistant example agent for ${participant.identity} (${participantId})`);
 
     const fncCtx: llm.FunctionContext = {
       studyMaterial: {
@@ -140,6 +128,7 @@ export default defineAgent({
       “Raise hands” button.
       Agent led interaction.
     */
+    
     const model = new openai.realtime.RealtimeModel({
       instructions: `
         You are a highly focused digital tutor. Your role is to teach ONLY the following content:
@@ -194,29 +183,7 @@ export default defineAgent({
         const decoder = new TextDecoder();
         const data = JSON.parse(decoder.decode(payload));
         if (data.type === 'interrupt') {
-          console.log("INTERRUPTED");
-          
-          // Let user talk, and mute agent.
-          // UGH
-
-          // //agent.interrupt();
-          // // lol what a dumb hack
-
-          // // session.conversation.item.create(llm.ChatMessage.create({
-          // //   role: llm.ChatRole.ASSISTANT,
-          // //   text: "You've raised your hand, do you have a question?",
-          // // }));
-          // // session.response.create();
-          
-          // session.emit('input_speech_started', {itemId: randomUUID()});
-          // console.log('input_speech_started')
-      
-          // setTimeout(() => {
-          //   session.emit('input_speech_committed');
-          //   console.log('input_speech_committed')
-          // }, 100);
-          // // if this works lmfao
-       
+          agent.interrupt();
         }
       } catch (e) {
         console.error('Error parsing data message:', e);

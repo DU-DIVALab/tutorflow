@@ -17,8 +17,12 @@ export type ConnectionDetails = {
   participantToken: string;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Get participantId from URL params
+    const { searchParams } = new URL(request.url);
+    const participantId = searchParams.get('participantId');
+
     if (LIVEKIT_URL === undefined) {
       throw new Error("LIVEKIT_URL is not defined");
     }
@@ -33,7 +37,10 @@ export async function GET() {
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
     const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
     const participantToken = await createParticipantToken(
-      { identity: participantIdentity },
+      { 
+        identity: participantIdentity,
+        metadata: JSON.stringify({ participantId }) // Add metadata here
+      },
       roomName,
     );
 

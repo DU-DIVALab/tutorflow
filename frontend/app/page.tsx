@@ -24,6 +24,12 @@ export default function Page() {
   const [participantId, setParticipantId] = useState<string>("");
   const [showStartLearning, setShowStartLearning] = useState(false);
 
+  const getBorderColor = (id: string) => {
+    const num = parseInt(id);
+    if (!id || isNaN(num)) return 'border-gray-300';
+    return num % 3 === 0 ? 'border-green-500' : 'border-gray-300';
+  };
+  
   const handleParticipantSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && participantId.trim()) {
       setShowStartLearning(true);
@@ -37,10 +43,13 @@ export default function Page() {
       process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
       window.location.origin
     );
-    console.log(participantId);
-    const response = await fetch(url.toString());
-    const connectionDetailsData = await response.json();
-    updateConnectionDetails(connectionDetailsData);
+    
+
+      // Add participantId as query parameter
+      url.searchParams.append('participantId', participantId);
+      const response = await fetch(url.toString());
+      const connectionDetailsData = await response.json();
+      updateConnectionDetails(connectionDetailsData);
   }, []);
 
 
@@ -57,7 +66,7 @@ export default function Page() {
             onChange={(e) => setParticipantId(e.target.value)}
             onKeyDown={handleParticipantSubmit}
             placeholder="Enter participant ID"
-            className="border-b border-gray-300 focus:border-black outline-none px-4 py-2 text-center"
+            className={`border-b-4 border-gray-500 focus:border-gray-300 outline-none px-8 py-4 text-center text-9xl transition-colors`}
           />
         </div>
       ) : (
@@ -107,7 +116,7 @@ function SimpleVoiceAssistant(props: {
 }
 
 function ControlBar(props: {
-  onConnectButtonClicked: (participantId: string) => void;
+  onConnectButtonClicked: () => void;
   agentState: AgentState;
 }) {
   const voiceAssistant = useVoiceAssistant();
@@ -133,7 +142,7 @@ function ControlBar(props: {
             exit={{ opacity: 0, top: "-10px" }}
             transition={{ duration: 1, ease: [0.09, 1.04, 0.245, 1.055] }}
             className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
-            onClick={() => props.onConnectButtonClicked("test")}
+            onClick={() => props.onConnectButtonClicked() }
           >
             Start Learning
           </motion.button>
