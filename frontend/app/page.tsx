@@ -32,8 +32,11 @@ export default function Page() {
   
   const handleParticipantSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && participantId.trim()) {
-      let k = participantId.trim();
-      if (k.startsWith("ULX-") || k.startsWith("ALX-") || k.startsWith("URH-") ) {
+      let k = participantId.trim().toLowerCase();
+      // User Led Interaction (SQUARE)
+      // Agent Led Interation (STAR)
+      // User Raise Hand (TRIANGLE)
+      if (k.startsWith("square") || k.startsWith("star") || k.startsWith("triangle") ) {
         setShowStartLearning(true);
       }
     }

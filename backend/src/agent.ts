@@ -86,7 +86,7 @@ export default defineAgent({
       studyMaterial: {
         description: 'Get the study material of a particular section and paragraph.',
         parameters: z.object({
-          section: z.string().describe('The section number'),
+          section: z.number().describe('The section you want to fetch'),
           paragraph: z.number().describe('The paragraph you want to fetch')
         }),
         execute: async ({ section, paragraph }) => {
@@ -94,7 +94,7 @@ export default defineAgent({
             const content = readFileSync(`./content/section${section}`, 'utf-8');
             const paragraphs = content.split("\n\n");
             if (paragraph >= 0 && paragraph < paragraphs.length) {
-              console.debug(`Fetching section ${section}, paragraph ${paragraph}`);
+              console.debug(`Fetching paragraph ${paragraph}`);
               return paragraphs[paragraph];
             }
             return "Paragraph not found";
@@ -102,6 +102,14 @@ export default defineAgent({
             console.error(`Error reading file: ${error}`);
             return "Error reading content";
           }
+        },
+      },
+      lessonEnd: {
+        description: 'Acknowledge the user is done learning the material',
+        parameters: z.object({}),
+        execute: async ({ }) => {
+          console.debug(`\n\n\nUSER IS DONE LEARNING\n\n\n`);
+          return "User is done learning."
         },
       },
     };
@@ -129,7 +137,7 @@ export default defineAgent({
       Agent led interaction.
     */
 
-    let mode = participantId.split("-")[0];
+    let mode = participantId.toLowerCase().split("-")[0];
     let specializePrompt = `
       CORE PRINCIPLES:
       - Teach ONLY the content above - no external topics or concepts
@@ -148,9 +156,10 @@ export default defineAgent({
       - If student gets sidetracked, acknowledge briefly then return to main topic
       - Keep the pace brisk but ensure comprehension
 
+      When the user is done learning all the material, acknowledge this. Otherwise do not stop until the learning is complete.
       Begin with a brief welcome and ask if they're ready to start learning about these philosophical concepts.
       `;
-    if (mode == "ALX") {
+    if (mode == "star") {
       specializePrompt = `
         CORE PRINCIPLES:
         - Teach ONLY the content above - no external topics or concepts
@@ -172,7 +181,9 @@ export default defineAgent({
         - If student gets sidetracked, acknowledge briefly then return to main topic
         - Keep the pace brisk but ensure comprehension
         
-        Begin with a brief welcome and ask if they're ready to start learning about these philosophical concepts.
+        When the user is done learning all the material, acknowledge this. Otherwise do not stop until the learning is complete.
+
+        Begin with a brief welcome and ask if they're ready to start learning about these philosophical concepts. 
       `;
     }
     
