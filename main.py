@@ -32,49 +32,41 @@ class PhilosophyTutor:
         self.current_paragraph_idx = 0
         self.hand_raised = False  # For HAND_RAISE mode
         self.section_understanding_confirmed = False
+        self.last_progress_announcement = 0  # Track last announced progress percentage
 
-    def _organize_content(self) -> Dict[str, List[Tuple[str, str]]]:
-        """Organize content by sections"""
-        sections: Dict[str, List[Tuple[str, str]]] = {}
-        current_section = None
-        current_content = []
+    def get_progress_percentage(self) -> int:
+        """Calculate current progress as a percentage"""
+        total_paragraphs = sum(len(paragraphs) for paragraphs in self.ordered_sections.values())
+        if total_paragraphs == 0:
+            return 0
+        return int((len(self.covered_paragraphs) / total_paragraphs) * 100)
 
-        for id, content in paragraphs_by_uuid.items():
-            if content.startswith('##'):
-                if current_section and current_content:
-                    sections[current_section] = current_content
-                current_section = content.split('\n')[0]
-                current_content = [(id, content)]
-            elif current_section:
-                current_content.append((id, content))
-
-        if current_section and current_content:
-            sections[current_section] = current_content
-
-        return dict(sorted(sections.items()))
-
-    def _clean_content(self, content: str) -> str:
-        """Remove section headers and clean content"""
-        if content.startswith('##'):
-            content = content.split('\n', 1)[1] if '\n' in content else ''
-        return content.strip()
-
-    def raise_hand(self):
-        """Allow interruption in HAND_RAISE mode"""
-        self.hand_raised = True
-
-    def lower_hand(self):
-        """Disable interruption in HAND_RAISE mode"""
-        self.hand_raised = False
-
-    def confirm_understanding(self):
-        """Mark current section as understood"""
-        self.section_understanding_confirmed = True
+    def should_announce_progress(self) -> tuple[bool, str]:
+        """
+        Determine if we should announce progress
+        Returns: (should_announce, message)
+        """
+        current_progress = self.get_progress_percentage()
+        
+        # Announce every 10% increment if we haven't announced it yet
+        if current_progress >= self.last_progress_announcement + 10:
+            self.last_progress_announcement = (current_progress // 10) * 10
+            message = f"You've completed {self.last_progress_announcement}% of the material. "
+            
+            # Add encouraging messages at specific milestones
+            if self.last_progress_announcement == 50:
+                message += "You're halfway through! Keep up the great work. "
+            elif self.last_progress_announcement == 80:
+                message += "Almost there! Just a bit more to go. "
+            elif self.last_progress_announcement == 100:
+                message += "Congratulations on completing the material! "
+                
+            return True, message
+            
+        return False, ""
 
     async def get_next_content(self, current_context: str) -> tuple[str, str, bool, bool]:
-        """Get next content based on teaching mode and progress
-        Returns: (paragraph_id, content, allow_interruptions, requires_understanding)
-        """
+        """Get next content based on teaching mode and progress"""
         if self.current_section_idx >= len(self.ordered_sections):
             logger.info("DONE TEACHING")
             return None, "We have covered all the material. Thank you for your participation", True, False
@@ -100,16 +92,22 @@ class PhilosophyTutor:
         self.current_paragraph_idx += 1
         self.covered_paragraphs.add(para_id)
 
+        # Check if we should announce progress
+        should_announce, progress_message = self.should_announce_progress()
+        if should_announce:
+            content = progress_message + self._clean_content(content)
+        else:
+            content = self._clean_content(content)
+
         # Determine interruption settings
         allow_interruptions = True
         if self.mode == TeachingMode.HAND_RAISE:
             allow_interruptions = self.hand_raised
 
-        cleaned_content = self._clean_content(content)
         requires_understanding = self.mode == TeachingMode.AGENT_LED
         
-        return para_id, cleaned_content, allow_interruptions, requires_understanding
-
+        return para_id, content, allow_interruptions, requires_understanding
+    
 async def entrypoint(ctx: JobContext):
     # Get teaching mode from environment or config
     if "tutor" not in ctx.proc.userdata:
