@@ -1,5 +1,13 @@
-# TutorFlow
+pip install -r requirements.txt
+pip install livekit-plugins-turn-detector
+python[3] main.py downlaod_files
+python[3] main.py dev
+source secrets.sh
 
-Multiple modes of interaction to facilitate learning with a voice-based AI agent
+```
+livekit-cli create-token --api-key="APIub94yPjkcdrp" --api-secret="o09FEHZiMWIJjKdmVNX8N75nAseDgumk83TV3yavaFE" --join --room="my-room" --identity="participant1"
+```
 
-https://docs.livekit.io/agents/quickstarts/s2s/
+
+this is so much better than the ts version thank GOD i dont have to extend a random class
+to access some random hidden function   
