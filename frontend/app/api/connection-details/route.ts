@@ -10,6 +10,9 @@ const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
+// don't cache the results
+export const revalidate = 0;
+
 export type ConnectionDetails = {
   serverUrl: string;
   roomName: string;
@@ -17,12 +20,8 @@ export type ConnectionDetails = {
   participantToken: string;
 };
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    // Get participantId from URL params
-    const { searchParams } = new URL(request.url);
-    const participantId = searchParams.get('participantId');
-
     if (LIVEKIT_URL === undefined) {
       throw new Error("LIVEKIT_URL is not defined");
     }
@@ -37,10 +36,7 @@ export async function GET(request: Request) {
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
     const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
     const participantToken = await createParticipantToken(
-      { 
-        identity: participantIdentity,
-        metadata: JSON.stringify({ participantId }) // Add metadata here
-      },
+      { identity: participantIdentity },
       roomName,
     );
 
@@ -51,7 +47,10 @@ export async function GET(request: Request) {
       participantToken: participantToken,
       participantName: participantIdentity,
     };
-    return NextResponse.json(data);
+    const headers = new Headers({
+      "Cache-Control": "no-store",
+    });
+    return NextResponse.json(data, { headers });
   } catch (error) {
     if (error instanceof Error) {
       console.error(error);
