@@ -1,2 +1,6 @@
 secrets.sh
 node_modules
+vector.pkl
+vdb_data/
+index.annoy
+metadata.pkl

@@ -1,7 +1,7 @@
 pip install -r requirements.txt
 pip install livekit-plugins-turn-detector
-python[3] main.py downlaod_files
-python[3] main.py dev
+python main.py download_files
+python main.py dev
 source secrets.sh
 
 ```
