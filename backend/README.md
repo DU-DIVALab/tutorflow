@@ -5,7 +5,7 @@ python main.py dev
 source secrets.sh
 
 ```
-livekit-cli create-token --api-key="APIub94yPjkcdrp" --api-secret="o09FEHZiMWIJjKdmVNX8N75nAseDgumk83TV3yavaFE" --join --room="my-room" --identity="participant1"
+livekit-cli create-token --api-key=$LIVEKIT_API_KEY --api-secret=$LIVEKIT_API_SECRET --join --room="my-room" --identity="participant1"
 ```
 
 
