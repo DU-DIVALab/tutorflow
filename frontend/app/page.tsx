@@ -19,6 +19,11 @@ import { CloseIcon } from "@/components/CloseIcon";
 import { useKrispNoiseFilter } from "@livekit/components-react/krisp";
 import { Hand } from "lucide-react";
 
+import { Description, Field, Input, Label } from '@headlessui/react'
+import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react'
+import clsx from 'clsx'
+
+
 const VALID_CODES = {
   SQUARE: "User Led Interaction",
   CIRCLE: "Agent Led Interaction",
@@ -32,6 +37,7 @@ export default function Page() {
   const [mode, setMode] = useState("");
   const [showCodeEntry, setShowCodeEntry] = useState(true);
   const [isHandRaised, setIsHandRaised] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleCodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,11 +46,20 @@ export default function Page() {
       setMode(VALID_CODES[upperCode as keyof typeof VALID_CODES]);
       setShowCodeEntry(false);
     } else {
-      alert("Invalid code. Please enter SQUARE, CIRCLE, or TRIANGLE.");
+      setIsDialogOpen(true);
     }
   };
 
-  const onConnectButtonClicked = useCallback(async () => {
+  useEffect(() => {
+    if (isDialogOpen) {
+      const timer = setTimeout(() => {
+        setIsDialogOpen(false);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [isDialogOpen]);
+
+  const onConnectbuttonClicked = useCallback(async () => {
     const url = new URL(
       process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
       window.location.origin
@@ -56,25 +71,49 @@ export default function Page() {
 
   return (
     <main data-lk-theme="default" className="h-full grid content-center bg-[var(--lk-bg)]">
+      <AnimatePresence>
+        {isDialogOpen && (
+          <Dialog static open={isDialogOpen} as={motion.div} className="relative z-50" onClose={() => setIsDialogOpen(false)}>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20, transition: { duration: 0.2 } }} className="fixed bottom-4 inset-x-0 mx-auto w-fit z-50">
+              <DialogPanel as={motion.div} className="max-w-[280px] rounded-lg bg-white/5 px-3 py-2 backdrop-blur-2xl shadow-lg border border-white/10">
+                <div className="flex items-center gap-2">
+                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-xl">🚫</motion.span>
+                  <div className="flex-1">
+                    <DialogTitle as="h3" className="text-sm font-medium text-white">Invalid Code</DialogTitle>
+                    <p className="text-xs text-white/60">Please enter a valid code</p>
+                  </div>
+                  <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="text-white/50 hover:text-white/75 p-1 -mr-1" onClick={() => setIsDialogOpen(false)}>
+                    <span className="sr-only">Close</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </motion.button>
+                </div>
+              </DialogPanel>
+            </motion.div>
+          </Dialog>
+        )}
+      </AnimatePresence>
       {showCodeEntry ? (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="p-6 bg-white rounded-lg shadow-lg max-w-md mx-auto"
-        >
-          <form onSubmit={handleCodeSubmit} className="space-y-4">
-            <input
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-lg flex justify-center items-center mx-auto">
+          <form onSubmit={handleCodeSubmit}>
+            <Field>
+              <Label className="text-lg  font-medium text-white">Code</Label>
+              <Description className="text-base text-white/50">Please enter the code you were given</Description>
+              <Input
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Enter code (SQUARE/CIRCLE/TRIANGLE)"
-              className="w-full p-2 border rounded"
-            />
-            <button type="submit" className="w-full p-2 bg-blue-500 text-white rounded">
-              Submit
-            </button>
+              autoComplete="off"
+              className={clsx(
+                'mt-3 block w-full rounded-lg border-none bg-white/5 py-1.5 px-3 text-lg text-white',
+                'focus:outline-none data-[focus]:outline-2 data-[focus]:-outline-offset-2 data-[focus]:outline-white/25'
+              )}
+              />
+            </Field>
           </form>
         </motion.div>
+
       ) : (
         <>
           <div className="text-center text-white text-xl mb-4">{mode}</div>
@@ -96,7 +135,7 @@ export default function Page() {
               mode={mode}
             />
             <ControlBar
-              onConnectButtonClicked={onConnectButtonClicked}
+              onConnectbuttonClicked={onConnectbuttonClicked}
               agentState={agentState}
               mode={mode}
               isHandRaised={isHandRaised}
@@ -148,7 +187,7 @@ function SimpleVoiceAssistant(props: {
 }
 
 function ControlBar(props: {
-  onConnectButtonClicked: () => void;
+  onConnectbuttonClicked: () => void;
   agentState: AgentState;
   mode: string;
   isHandRaised: boolean;
@@ -176,7 +215,7 @@ function ControlBar(props: {
             exit={{ opacity: 0, top: "-10px" }}
             transition={{ duration: 1, ease: [0.09, 1.04, 0.245, 1.055] }}
             className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
-            onClick={() => props.onConnectButtonClicked()}
+            onClick={() => props.onConnectbuttonClicked()}
           >
             Start a conversation
           </motion.button>
