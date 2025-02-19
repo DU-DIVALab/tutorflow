@@ -5,6 +5,13 @@
 :root {
   --lk-va-bar-width: 72px;
   --lk-control-bar-height: unset;
+
+}
+
+@layer base {
+  html {
+    font-family: Vollkorn, system-ui, serif !important;
+  }
 }
 
 .agent-visualizer > .lk-audio-bar {
@@ -17,4 +24,8 @@
 
 .lk-disconnect-button {
   @apply h-[36px] hover:bg-[#6b221a] hover:text-[white] bg-[#31100c] border-[#6b221a];
+}
+
+[data-lk-theme] {
+  font-family: 'Vollkorn', system-ui, serif;
 }

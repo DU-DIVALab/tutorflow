@@ -20,7 +20,7 @@ import { useKrispNoiseFilter } from "@livekit/components-react/krisp";
 import { Hand } from "lucide-react";
 
 import { Description, Field, Input, Label } from '@headlessui/react'
-import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react'
+import { Dialog, DialogPanel, DialogTitle, Button} from '@headlessui/react'
 import clsx from 'clsx'
 
 
@@ -98,7 +98,7 @@ export default function Page() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-lg flex justify-center items-center mx-auto">
           <form onSubmit={handleCodeSubmit}>
             <Field>
-              <Label className="text-lg  font-medium text-white">Code</Label>
+              <Label className="text-lg font-medium text-white">Code</Label>
               <Description className="text-base text-white/50">Please enter the code you were given</Description>
               <Input
               type="text"
@@ -115,8 +115,7 @@ export default function Page() {
         </motion.div>
 
       ) : (
-        <>
-          <div className="text-center text-white text-xl mb-4">{mode}</div>
+        <div>
           <LiveKitRoom
             token={connectionDetails?.participantToken}
             serverUrl={connectionDetails?.serverUrl}
@@ -144,7 +143,8 @@ export default function Page() {
             <RoomAudioRenderer />
             <NoAgentNotification state={agentState} />
           </LiveKitRoom>
-        </>
+          <p className="text-white/60 text-center"><i>{mode}</i></p>
+        </div>
       )}
     </main>
   );
@@ -217,7 +217,7 @@ function ControlBar(props: {
             className="uppercase absolute left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-md"
             onClick={() => props.onConnectbuttonClicked()}
           >
-            Start a conversation
+            Start Learning
           </motion.button>
         )}
       </AnimatePresence>
