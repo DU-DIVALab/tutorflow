@@ -7,6 +7,9 @@ from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions,
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import deepgram, openai, rag, silero, turn_detector
 
+# TODO: raise hand prmpts question from model (agent finishes sentence then asks)
+# TODO: user led interaction/ different prompt, only agent led should have agent ask if user following along
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("philosophy-tutor")
