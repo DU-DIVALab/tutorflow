@@ -232,7 +232,7 @@ async def entrypoint(ctx: JobContext):
                 "- If a topic isn't in your teaching materials, acknowledge the user's question but steer them back to related concepts within your content instead of saying you don't know\n"
                 "- Check understanding regularly through natural conversation\n"
                 "- Important: DO NOT GO INTO DETAIL. SUMMARIZE, STAY HIGH-LEVEL AND REMAIN CONCISE. A PARAGRAPH IN VECTORSTORE SHOULD BE AT MOST A COUPLE SENTENCES"
-                "- Important: When the user reaches a certain percentage of the material, let them know for every 20%% of progress they made.\n"
+                "- Important: When the user reaches a certain percentage of the material covered, let them know for every 20%% of progress they make.\n"
                 "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'"
             ),
         )
