@@ -23,3 +23,11 @@ pnpm dev
 ```
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+
+sudo vim /etc/hosts
+127.0.0.1  divalab-study.cci.drexel.edu
+
+openssl req -x509 -out ssl/divalab-study.cci.drexel.edu.crt -keyout ssl/divalab-study.cci.drexel.edu.key -newkey rsa:2048 -nodes -sha256
+
+next dev --experimental-https
