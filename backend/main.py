@@ -108,18 +108,27 @@ class PhilosophyTutor:
         self.hand_raised = False
         logger.info("Hand lowered")
 
+        
+
     def confirm_understanding(self):
         self.section_understanding_confirmed = True
         logger.info("Understanding confirmed for current section")
 
     async def get_next_content(self, current_context: str) -> tuple[Optional[str], str, bool, bool]:
         try:
+            if self.mode == TeachingMode.HAND_RAISE and self.hand_raised:
+                self.hand_raised = False 
+                return None, "Sure! What's your question?", True, False
+
+
             if self.current_section_idx >= len(self.ordered_sections):
                 logger.info("Teaching completed")
                 return None, "We have covered all the material. Thank you for your participation", True, False
 
             current_section = list(self.ordered_sections.keys())[self.current_section_idx]
             current_paragraphs = self.ordered_sections[current_section]
+
+
 
             if self.mode == TeachingMode.AGENT_LED and not self.section_understanding_confirmed:
                 return None, "Please demonstrate your understanding of what we've discussed before we continue.", True, True
@@ -155,7 +164,8 @@ class PhilosophyTutor:
 async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext, tutor: PhilosophyTutor):
     try:
         user_msg = chat_ctx.messages[-1]
-        
+
+  
         if tutor.mode == TeachingMode.AGENT_LED and not tutor.section_understanding_confirmed:
             embedding = await openai.create_embeddings(
                 input=[user_msg.content],
@@ -177,6 +187,11 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                 mode_instructions = "Ensure user understanding before proceeding. Ask specific questions about the content to gauge understanding, not opinions."
             elif tutor.mode == TeachingMode.HAND_RAISE:
                 mode_instructions = "Wait for user to raise their hand before allowing interruptions."
+                if tutor.hand_raised:
+                    tutor.lower_hand() 
+                    agent.allow_interruptions = True
+                    chat_ctx.messages.append(llm.ChatMessage.create(text="You raised your hand! What's your question?", role="assistant")) 
+            
                 
             context_msg = llm.ChatMessage.create(
                 text=f"""Teaching Context:
@@ -205,7 +220,6 @@ async def entrypoint(ctx: JobContext):
         
         tutor = ctx.proc.userdata["tutor"]
         mode = tutor.mode
-
         initial_ctx = llm.ChatContext().append(
             role="system",
             text=(
@@ -215,25 +229,33 @@ async def entrypoint(ctx: JobContext):
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
                 "- Do not sound like you are reading off a textbook\n"
                 "- Use disfluencies like 'uh' 'uhm' and 'like' to sound more human\n"
-                "- Add connections to the modern student's life\n"
-                "- Present ideas progressively, one concept at a time\n"
+                "- Add connections to the modern student's life experiences\n"
+                "- Present ideas progressively, one concept at a time for better understanding\n"
                 "- Keep explanations concise and high-level while ensuring understanding. It is important to stay concise.\n\n"
                 "Your teaching approach:\n"
                 "- Introduce concepts individually with brief, focused explanations\n"
+                "- Summarize bigger ideas to maintain user engagement\n"
                 "- Use short, relevant examples when clarifying points\n"
-                "- Keep responses crisp and targeted to maintain engagement\n"
+                "- Keep responses short, crisp, and targeted to maintain engagement\n"
                 "- Build understanding step by step before moving forward\n\n"
                 "Interaction guidelines:\n"
                 "- Maintain a brisk but comprehensible pace\n"
-                "- Do not ask the user about their opinion, ever"
+                "- Do not ask the user about their opinion, ever\n"
                 "- For off-topic questions, acknowledge briefly then guide back to the current topic\n"
                 "- Never reference document structure, sections, or figures\n"
                 "- Keep the conversation flowing naturally without sounding like you're reading from a text\n"
-                "- If a topic isn't in your teaching materials, redirect to related concepts within your content\n"
+                "- If a topic isn't in your teaching materials, acknowledge the user's question but steer them back to related concepts within your content instead of saying you don't know\n"
                 "- Check understanding regularly through natural conversation\n"
-                "- Important: DO NOT GO INTO DETAIL. SUMMARIZE, STAY HIGH-LEVEL AND REMAIN CONCISE. A PARAGRAPH IN VECTORSTORE SHOULD BE AT MOST A COUPLE SENTENCES"
-                "- Important: When the user reaches a certain percentage of the material, let them know.\n"
-                "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'"
+                "- Maintain a brisk but comprehensible pace while adapting based on the following teaching modes: \n"
+                "\t-User Led: Allow the user to interrupt at any time and adjust explanations based on their input\n."
+                "\t-Hand Raise: Encourage the user to ask questions at natural pauses.\n"
+                "\t-Agent-Led: Ask engaging, relevant questions periodically to check comprehension\n"
+                "- Ensure the AI's responses match the chosen teaching style without forcing interactions.\n\n"
+
+                "- Important: DO NOT GO INTO DETAIL. SUMMARIZE, STAY HIGH-LEVEL AND REMAIN CONCISE. A PARAGRAPH IN VECTORSTORE SHOULD BE AT MOST A COUPLE SENTENCES. SUMMARIZE INFO IF NECESSARY"
+                "- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 20%% of progress they make.\n"
+                "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
+                "- CRITICAL: Save the meeting transcript for the reviewer when done"
             ),
         )
 

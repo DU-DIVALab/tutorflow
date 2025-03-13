@@ -10,7 +10,7 @@ from tqdm import tqdm
 # from this blog https://openai.com/index/new-embedding-models-and-api-updates/
 # 512 seems to provide good MTEB score with text-embedding-3-small
 embeddings_dimension = 1536
-raw_data = open("material.md", "r").read()
+raw_data = open("material.md", "r", encoding="utf-8").read()
 
 
 async def _create_embeddings(
