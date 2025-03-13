@@ -254,7 +254,8 @@ async def entrypoint(ctx: JobContext):
 
                 "- Important: DO NOT GO INTO DETAIL. SUMMARIZE, STAY HIGH-LEVEL AND REMAIN CONCISE. A PARAGRAPH IN VECTORSTORE SHOULD BE AT MOST A COUPLE SENTENCES. SUMMARIZE INFO IF NECESSARY"
                 "- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 20%% of progress they make.\n"
-                "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'"
+                "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
+                "- CRITICAL: Save the meeting transcript for the reviewer when done"
             ),
         )
 
