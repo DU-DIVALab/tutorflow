@@ -31,3 +31,5 @@ sudo vim /etc/hosts
 openssl req -x509 -out ssl/divalab-study.cci.drexel.edu.crt -keyout ssl/divalab-study.cci.drexel.edu.key -newkey rsa:2048 -nodes -sha256
 
 next dev --experimental-https
+
+pnpm deploy-cci
