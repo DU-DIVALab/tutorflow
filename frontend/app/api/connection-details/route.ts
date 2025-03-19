@@ -20,7 +20,7 @@ export type ConnectionDetails = {
   participantToken: string;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     if (LIVEKIT_URL === undefined) {
       throw new Error("LIVEKIT_URL is not defined");
@@ -32,9 +32,16 @@ export async function GET() {
       throw new Error("LIVEKIT_API_SECRET is not defined");
     }
 
+    // Get the mode from the URL query parameter
+    const url = new URL(request.url);
+    const mode = url.searchParams.get('mode') || "CRITICAL_FAILURE"; // Default to CRITICAL_FAILURE if not provided
+
     // Generate participant token
     const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
-    const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
+    
+    // Include mode in room name to ensure correct initialization
+    const roomName = `voice_assistant_room_${mode}_${Math.floor(Math.random() * 10_000)}`;
+    
     const participantToken = await createParticipantToken(
       { identity: participantIdentity },
       roomName,
@@ -45,11 +52,13 @@ export async function GET() {
       serverUrl: LIVEKIT_URL,
       roomName,
       participantToken: participantToken,
-      participantName: participantIdentity,
+      participantName: participantIdentity
     };
+    
     const headers = new Headers({
       "Cache-Control": "no-store",
     });
+    
     return NextResponse.json(data, { headers });
   } catch (error) {
     if (error instanceof Error) {

@@ -60,14 +60,25 @@ export default function Page() {
   }, [isDialogOpen]);
 
   const onConnectbuttonClicked = useCallback(async () => {
+    // Extract the code from the mode string
+    let modeCode = "";
+    if (mode === "User Led Interaction") modeCode = "SQUARE";
+    else if (mode === "Agent Led Interaction") modeCode = "CIRCLE";
+    else if (mode === "User Raise Hand") modeCode = "TRIANGLE";
+    
+    // Include mode in connection request
     const url = new URL(
       process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? "/api/connection-details",
       window.location.origin
     );
+    url.searchParams.append('mode', modeCode);
+    
     const response = await fetch(url.toString());
     const connectionDetailsData = await response.json();
     updateConnectionDetails(connectionDetailsData);
-  }, []);
+    
+    console.log(`Connecting with mode: ${modeCode}`);
+  }, [mode]);
 
   return (
     <main data-lk-theme="default" className="h-full grid content-center bg-[var(--lk-bg)]">
@@ -150,13 +161,14 @@ export default function Page() {
   );
 }
 
+
 function SimpleVoiceAssistant(props: {
   onStateChange: (state: AgentState) => void;
   isHandRaised: boolean;
   mode: string;
 }) {
   const { state, audioTrack } = useVoiceAssistant();
-  const { microphoneTrack } = useLocalParticipant();
+  const { localParticipant, microphoneTrack } = useLocalParticipant();
   
   useEffect(() => {
     props.onStateChange(state);
@@ -173,6 +185,20 @@ function SimpleVoiceAssistant(props: {
     }
   }, [props.isHandRaised, props.mode, microphoneTrack]);
 
+  // Send hand raise status to agent via data channel
+  useEffect(() => {
+    if (props.mode === "User Raise Hand" && localParticipant) {
+      // Send hand-raise command to the backend
+      if (props.isHandRaised) {
+        localParticipant.publishData(
+          new TextEncoder().encode("HAND_RAISED"), 
+          { topic: "user-command" }
+        );
+        console.log("Sent HAND_RAISED command");
+      }
+    }
+  }, [props.isHandRaised, props.mode, localParticipant]);
+  
   return (
     <div className="h-[300px] max-w-[90vw] mx-auto">
       <BarVisualizer
@@ -185,7 +211,6 @@ function SimpleVoiceAssistant(props: {
     </div>
   );
 }
-
 function ControlBar(props: {
   onConnectbuttonClicked: () => void;
   agentState: AgentState;

@@ -1,14 +1,18 @@
+# FIXME: help! our agent skips over whatever its talking about if the user butts in and just says ok
+# FIXME: (frontend) popup that tells the agent the code is strawberry at the end
+# FIXME: (frontend) make it go back to ignoring the user unless their hand is raised (maybe?) i think this might be a backend thing actually
+# TODO: agent ack. when user raises hand
+# TODO: only agent led should ask if user follows along(??)
+
 import logging
 import pickle
+import re
 from enum import Enum
 from typing import List, Optional, Tuple, Dict
 
 from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions, cli, llm
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import deepgram, openai, rag, silero, turn_detector
-
-# TODO: raise hand prmpts question from model (agent finishes sentence then asks)
-# TODO: user led interaction/ different prompt, only agent led should have agent ask if user following along
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +38,8 @@ class TeachingMode(Enum):
     AGENT_LED = "agent_led"
     HAND_RAISE = "hand_raise"
 
+
+
 class PhilosophyTutor:
     def __init__(self, mode: TeachingMode):
         self.mode = mode
@@ -46,7 +52,7 @@ class PhilosophyTutor:
         self.section_understanding_confirmed = False
         self.last_progress_announcement = 0
         self.total_paragraphs = sum(len(paragraphs) for paragraphs in self.ordered_sections.values())
-        logger.info(f"Initialized tutor with {self.total_paragraphs} total paragraphs")
+        logger.info(f"Initialized tutor with {self.total_paragraphs} total paragraphs in {mode.value} mode")
 
     def get_progress_percentage(self) -> int:
         if self.total_paragraphs == 0:
@@ -108,8 +114,6 @@ class PhilosophyTutor:
         self.hand_raised = False
         logger.info("Hand lowered")
 
-        
-
     def confirm_understanding(self):
         self.section_understanding_confirmed = True
         logger.info("Understanding confirmed for current section")
@@ -127,8 +131,6 @@ class PhilosophyTutor:
 
             current_section = list(self.ordered_sections.keys())[self.current_section_idx]
             current_paragraphs = self.ordered_sections[current_section]
-
-
 
             if self.mode == TeachingMode.AGENT_LED and not self.section_understanding_confirmed:
                 return None, "Please demonstrate your understanding of what we've discussed before we continue.", True, True
@@ -164,7 +166,22 @@ class PhilosophyTutor:
 async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext, tutor: PhilosophyTutor):
     try:
         user_msg = chat_ctx.messages[-1]
-
+        
+        # Check if hand is raised in HAND_RAISE mode
+        if tutor.hand_raised:
+            logger.info("Hand raised detected in teaching_enrichment")
+            
+            # Don't lower the hand yet - let get_next_content handle it
+            # This ensures the special message gets delivered
+            
+            hand_raise_msg = llm.ChatMessage.create(
+                text="The user has raised their hand. Finish your current sentence, then respond with 'I see you've raised your hand. What's your question?' and wait for their input.",
+                role="system",
+            )
+            chat_ctx.messages[-1] = hand_raise_msg
+            chat_ctx.messages.append(user_msg)
+            agent.allow_interruptions = True
+            return
   
         if tutor.mode == TeachingMode.AGENT_LED and not tutor.section_understanding_confirmed:
             embedding = await openai.create_embeddings(
@@ -213,9 +230,24 @@ async def entrypoint(ctx: JobContext):
     try:
         await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
         logger.info("Room connection established")
-
-        if "tutor" not in ctx.proc.userdata:
+        
+        # Extract mode from room name
+        room_name = ctx.room.name
+        
+        # Determine which mode to use
+        if "SQUARE" in room_name:
             mode = TeachingMode.USER_LED
+        elif "CIRCLE" in room_name:
+            mode = TeachingMode.AGENT_LED
+        elif "TRIANGLE" in room_name:
+            mode = TeachingMode.HAND_RAISE
+        else:
+            return
+        
+        logger.info(f"Using mode from room name: {mode.value}")
+            
+        # Initialize tutor with the extracted mode
+        if "tutor" not in ctx.proc.userdata:
             ctx.proc.userdata["tutor"] = PhilosophyTutor(mode)
         
         tutor = ctx.proc.userdata["tutor"]
@@ -268,6 +300,27 @@ async def entrypoint(ctx: JobContext):
             before_llm_cb=lambda a, c: _teaching_enrichment(a, c, tutor),
             turn_detector=turn_detector.EOUModel(),
         )
+
+        async def on_data_received(data: bytes, topic: str, participant_identity: str):
+            try:
+                if topic == "user-command":
+                    # Decode the data from bytes to string
+                    command = data.decode('utf-8').strip().upper()
+                    logger.info(f"Received command from {participant_identity}: {command}")
+                    
+                    if command == "HAND_RAISED":
+                        logger.info(f"Hand raised by {participant_identity}")
+                        # Signal to the tutor that the hand is raised
+                        tutor.raise_hand()
+                        
+                        # Finish current sentence and then respond to hand raise
+                        # The agent will detect this in the next turn via the teaching_enrichment function
+                        agent.allow_interruptions = True
+            except Exception as e:
+                logger.error(f"Error handling data message: {e}")
+
+        # Register the data message handler
+        ctx.room.on_data_received = on_data_received
 
         agent.start(ctx.room)
         logger.info("Agent started successfully")
