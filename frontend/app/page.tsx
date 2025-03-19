@@ -10,9 +10,10 @@ import {
   AgentState,
   DisconnectButton,
   useLocalParticipant,
+  useRoomContext,
 } from "@livekit/components-react";
 import { useCallback, useEffect, useState } from "react";
-import { MediaDeviceFailure } from "livekit-client";
+import { MediaDeviceFailure, RemoteParticipant, Room, RoomEvent } from "livekit-client";
 import type { ConnectionDetails } from "./api/connection-details/route";
 import { NoAgentNotification } from "@/components/NoAgentNotification";
 import { CloseIcon } from "@/components/CloseIcon";
@@ -38,6 +39,7 @@ export default function Page() {
   const [showCodeEntry, setShowCodeEntry] = useState(true);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
 
   const handleCodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,6 +163,38 @@ export default function Page() {
   );
 }
 
+// StrawberryToast component for notifications when "Strawberry" is mentioned
+function StrawberryToast({ isVisible, onClose }) {
+  if (!isVisible) return null;
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }} 
+      animate={{ opacity: 1, y: 0 }} 
+      exit={{ opacity: 0, y: 20, transition: { duration: 0.2 } }}
+      className="fixed top-4 right-4 z-50 max-w-[280px] rounded-lg bg-green-500/90 px-3 py-2 backdrop-blur-2xl shadow-lg border border-white/10"
+    >
+      <div className="flex items-center gap-2">
+        <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-xl">🍓</motion.span>
+        <div className="flex-1">
+          <h3 className="text-sm font-medium text-white">strawberry</h3>
+          <p className="text-xs text-white/80">Your code is "strawberry"</p>
+        </div>
+        <motion.button 
+          whileHover={{ scale: 1.1 }} 
+          whileTap={{ scale: 0.9 }} 
+          className="text-white/50 hover:text-white/75 p-1 -mr-1" 
+          onClick={onClose}
+        >
+          <span className="sr-only">Close</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
 
 function SimpleVoiceAssistant(props: {
   onStateChange: (state: AgentState) => void;
@@ -169,10 +203,28 @@ function SimpleVoiceAssistant(props: {
 }) {
   const { state, audioTrack } = useVoiceAssistant();
   const { localParticipant, microphoneTrack } = useLocalParticipant();
+  const [isStrawberryToastVisible, setIsStrawberryToastVisible] = useState(false);
+  const [room, setRoom] = useState<Room>(new Room());
   
+  // Add listener for data messages
+  useEffect(() => {
+    const handleData = (payload: Uint8Array, participant?: RemoteParticipant) => {
+      const decoder = new TextDecoder();
+      const command = decoder.decode(payload);
+      console.log('Received command:', command);
+    };
+
+    room.on(RoomEvent.DataReceived, handleData);
+
+    return () => {
+      room.off(RoomEvent.DataReceived, handleData);
+    };
+  }, [room]);
+
   useEffect(() => {
     props.onStateChange(state);
-  }, [props, state]);
+  })
+
 
   // Control microphone based on hand raise state
   useEffect(() => {
@@ -192,15 +244,34 @@ function SimpleVoiceAssistant(props: {
       if (props.isHandRaised) {
         localParticipant.publishData(
           new TextEncoder().encode("HAND_RAISED"), 
-          { topic: "user-command" }
-        );
-        console.log("Sent HAND_RAISED command");
+          { topic: "user-command", reliable: true }
+        ).then(data => {
+          console.log("Sent HAND_RAISED command");
+        })
       }
     }
   }, [props.isHandRaised, props.mode, localParticipant]);
+
+  // Auto-hide toast after 5 seconds
+  // useEffect(() => {
+  //   if (isStrawberryToastVisible) {
+  //     const timer = setTimeout(() => {
+  //       setIsStrawberryToastVisible(false);
+  //     }, 5000);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [isStrawberryToastVisible]);
   
   return (
     <div className="h-[300px] max-w-[90vw] mx-auto">
+      <AnimatePresence>
+        {isStrawberryToastVisible && (
+          <StrawberryToast 
+            isVisible={isStrawberryToastVisible} 
+            onClose={() => setIsStrawberryToastVisible(false)} 
+          />
+        )}
+      </AnimatePresence>
       <BarVisualizer
         state={state}
         barCount={5}
@@ -211,6 +282,7 @@ function SimpleVoiceAssistant(props: {
     </div>
   );
 }
+
 function ControlBar(props: {
   onConnectbuttonClicked: () => void;
   agentState: AgentState;

@@ -13,6 +13,9 @@ from typing import List, Optional, Tuple, Dict
 from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions, cli, llm
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import deepgram, openai, rag, silero, turn_detector
+from livekit.rtc.room import DataPacket
+
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,9 +75,9 @@ class PhilosophyTutor:
                 message += "You're halfway through! Keep up the great work. "
             elif self.last_progress_announcement == 80:
                 message += "Almost there! Just a bit more to go. "
-            elif self.last_progress_announcement == 100:
-                message += "Congratulations on completing the material! "
-                #logger.info("USER IS DONE.")
+            elif self.last_progress_announcement >= 98:
+                message += "Congratulations on completing the material! The code is 'strawberry'. "
+                logger.info("USER IS DONE. SENDING STRAWBERRY CODE.")
             
             logger.info(f"Progress announcement: {message}")
             return True, message
@@ -194,6 +197,17 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             if True:  # Replace with actual understanding check
                 tutor.confirm_understanding()
         
+        # Get progress and check completion
+        current_progress = tutor.get_progress_percentage()
+        if current_progress >= 98:
+            # Ensure strawberry code is explicitly mentioned when content is completed
+            completion_msg = llm.ChatMessage.create(
+                text="CRITICAL: The user has completed the material! Make sure to tell them: 'Congratulations on completing all the material! Your code is strawberry.' This is extremely important.",
+                role="system",
+            )
+            chat_ctx.messages.append(completion_msg)
+            logger.info("Added strawberry code message for 100% completion")
+        
         para_id, paragraph, allow_interruptions, requires_understanding = await tutor.get_next_content(user_msg.content)
         
         if paragraph:
@@ -209,6 +223,11 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                     agent.allow_interruptions = True
                     chat_ctx.messages.append(llm.ChatMessage.create(text="You raised your hand! What's your question?", role="assistant")) 
             
+            # Check if the paragraph contains the strawberry code completion message
+            if "strawberry" in paragraph.lower():
+                logger.info("DETECTED STRAWBERRY CODE IN CONTENT - ENSURING IT'S PRONOUNCED")
+                # Add additional instruction to ensure strawberry code is spoken clearly
+                mode_instructions += " CRITICAL: Make sure to clearly say the word 'strawberry' as the code."
                 
             context_msg = llm.ChatMessage.create(
                 text=f"""Teaching Context:
@@ -230,7 +249,7 @@ async def entrypoint(ctx: JobContext):
     try:
         await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
         logger.info("Room connection established")
-        
+
         # Extract mode from room name
         room_name = ctx.room.name
         
@@ -301,26 +320,25 @@ async def entrypoint(ctx: JobContext):
             turn_detector=turn_detector.EOUModel(),
         )
 
-        async def on_data_received(data: bytes, topic: str, participant_identity: str):
-            try:
-                if topic == "user-command":
-                    # Decode the data from bytes to string
-                    command = data.decode('utf-8').strip().upper()
-                    logger.info(f"Received command from {participant_identity}: {command}")
+        def on_data_received(packet: DataPacket):
+            if packet.topic == "user-command":
+                command = packet.data.decode('utf-8').strip().upper()
+                #logger.info(f"Command received from {packet.participant_identity}: {command}")
+                if command == "HAND_RAISED":
+                    logger.info("hand raised lol!")
+                    #logger.info(f"Hand raised by {packet.participant_identity}")
+                    tutor = ctx.proc.userdata.get("tutor")
                     
-                    if command == "HAND_RAISED":
-                        logger.info(f"Hand raised by {participant_identity}")
-                        # Signal to the tutor that the hand is raised
-                        tutor.raise_hand()
-                        
-                        # Finish current sentence and then respond to hand raise
-                        # The agent will detect this in the next turn via the teaching_enrichment function
-                        agent.allow_interruptions = True
-            except Exception as e:
-                logger.error(f"Error handling data message: {e}")
+                    asyncio.create_task(ctx.room.local_participant.publish_data(
+                        payload="HAND_ACKNOWLEDGED",
+                        reliable=True,
+                        topic="user-command"
+                    ))
+                    
+                    if tutor:
+                        tutor.raise_hand() # TODO: immideiately say smth
 
-        # Register the data message handler
-        ctx.room.on_data_received = on_data_received
+        ctx.room.on("data_received", on_data_received)
 
         agent.start(ctx.room)
         logger.info("Agent started successfully")
@@ -331,6 +349,7 @@ async def entrypoint(ctx: JobContext):
             f"Welcome! I'm your philosophy tutor. Let's begin. {first_paragraph}",
             allow_interruptions=allow_interruptions
         )
+
 
     except Exception as e:
         logger.error(f"Failed to initialize: {str(e)}")
