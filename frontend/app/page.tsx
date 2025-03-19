@@ -204,14 +204,16 @@ function SimpleVoiceAssistant(props: {
   const { state, audioTrack } = useVoiceAssistant();
   const { localParticipant, microphoneTrack } = useLocalParticipant();
   const [isStrawberryToastVisible, setIsStrawberryToastVisible] = useState(false);
-  const [room, setRoom] = useState<Room>(new Room());
+  const room = useRoomContext();
   
   // Add listener for data messages
   useEffect(() => {
     const handleData = (payload: Uint8Array, participant?: RemoteParticipant) => {
       const decoder = new TextDecoder();
       const command = decoder.decode(payload);
-      console.log('Received command:', command);
+      if (command == "strawberry") {
+        setIsStrawberryToastVisible(true);
+      }
     };
 
     room.on(RoomEvent.DataReceived, handleData);
@@ -244,7 +246,7 @@ function SimpleVoiceAssistant(props: {
       if (props.isHandRaised) {
         localParticipant.publishData(
           new TextEncoder().encode("HAND_RAISED"), 
-          { topic: "user-command", reliable: true }
+          { topic: "command", reliable: true }
         ).then(data => {
           console.log("Sent HAND_RAISED command");
         })

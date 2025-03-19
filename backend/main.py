@@ -44,7 +44,8 @@ class TeachingMode(Enum):
 
 
 class PhilosophyTutor:
-    def __init__(self, mode: TeachingMode):
+    def __init__(self, mode: TeachingMode, ctx = None):
+        self.ctx = ctx
         self.mode = mode
         self.covered_paragraphs = set()
         self.current_section: Optional[str] = None
@@ -78,6 +79,16 @@ class PhilosophyTutor:
             elif self.last_progress_announcement >= 98:
                 message += "Congratulations on completing the material! The code is 'strawberry'. "
                 logger.info("USER IS DONE. SENDING STRAWBERRY CODE.")
+                
+                # Use self.ctx instead of ctx
+                if self.ctx:
+                    asyncio.create_task(self.ctx.room.local_participant.publish_data(
+                        payload="strawberry",
+                        reliable=True,
+                        topic="command"
+                    ))
+                else:
+                    exit(1)
             
             logger.info(f"Progress announcement: {message}")
             return True, message
@@ -265,9 +276,9 @@ async def entrypoint(ctx: JobContext):
         
         logger.info(f"Using mode from room name: {mode.value}")
             
-        # Initialize tutor with the extracted mode
+        # Initialize tutor with the extracted mode and ctx
         if "tutor" not in ctx.proc.userdata:
-            ctx.proc.userdata["tutor"] = PhilosophyTutor(mode)
+            ctx.proc.userdata["tutor"] = PhilosophyTutor(mode, ctx)
         
         tutor = ctx.proc.userdata["tutor"]
         mode = tutor.mode
@@ -321,20 +332,14 @@ async def entrypoint(ctx: JobContext):
         )
 
         def on_data_received(packet: DataPacket):
-            if packet.topic == "user-command":
+            if packet.topic == "command":
                 command = packet.data.decode('utf-8').strip().upper()
                 #logger.info(f"Command received from {packet.participant_identity}: {command}")
                 if command == "HAND_RAISED":
                     logger.info("hand raised lol!")
                     #logger.info(f"Hand raised by {packet.participant_identity}")
                     tutor = ctx.proc.userdata.get("tutor")
-                    
-                    asyncio.create_task(ctx.room.local_participant.publish_data(
-                        payload="HAND_ACKNOWLEDGED",
-                        reliable=True,
-                        topic="user-command"
-                    ))
-                    
+
                     if tutor:
                         tutor.raise_hand() # TODO: immideiately say smth
 
