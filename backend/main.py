@@ -328,7 +328,7 @@ async def entrypoint(ctx: JobContext):
         initial_ctx = llm.ChatContext().append(
             role="system",
             text=(
-`                "You are a philosophy tutor created by LiveKit engaging in voice-based teaching. "
+`               "You are a philosophy tutor engaging in voice-based teaching. "
                 f"Teaching in {mode.value} mode with core principles:\n"
                 "- Focus exclusively on the content provided in the Teaching Context - never introduce external concepts\n"
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
