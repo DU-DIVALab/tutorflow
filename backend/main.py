@@ -1,29 +1,24 @@
-# FIXME: help! our agent skips over whatever its talking about if the user butts in and just says ok
-# FIXME: (frontend) popup that tells the agent the code is strawberry at the end
-# FIXME: (frontend) make it go back to ignoring the user unless their hand is raised (maybe?) i think this might be a backend thing actually
-# TODO: only agent led should ask if user follows along(??)
+# TODO: help! our agent skips over whatever its talking about if the user butts in and just says ok
+# TODO: (frontend) make it go back to ignoring the user unless their hand is raised (maybe?) i think this might be a backend thing actually
+
+# FIXME: strawberry glitch(?)
+# FIXME: only agent led should ask if user follows along (??)
 
 
 import os
 import datetime
 import logging
 import pickle
-import functools
-import re
 from enum import Enum
 from typing import List, Optional, Tuple, Dict
 
 
-from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions, cli, llm, stt, transcription
-from livekit.plugins.deepgram import STT
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import deepgram, openai, rag, silero, turn_detector
 from livekit.rtc.room import DataPacket
 
 import asyncio
-
-from livekit.rtc import Participant, TranscriptionSegment, TrackPublication
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -51,18 +46,6 @@ class TeachingMode(Enum):
 
 
 
-async def _forward_transcription(
-    stt_stream: stt.SpeechStream,
-    stt_forwarder: transcription.STTSegmentsForwarder,
-):
-    """Forward the transcription and log the transcript in the console"""
-    async for ev in stt_stream:
-        stt_forwarder.update(ev)
-        if ev.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
-            pass#print(ev.alternatives[0].text, end="")
-        elif ev.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
-            logger.info("\n")
-            logger.info(" -> ", ev.alternatives[0].text)
                   
 def get_transcript_path(room_name):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -228,8 +211,8 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
     try:
         user_msg = chat_ctx.messages[-1]
         
-        # Save user message to transcript if it's from the user
-        #if user_msg.role == "user" and hasattr(agent, "transcript_file"):
+        # We don't want to save a user's transcript
+        # if user_msg.role == "user" and hasattr(agent, "transcript_file"):
         #   save_to_transcript(agent.transcript_file, "User", user_msg.content)
 
         # Check if hand is raised in HAND_RAISE mode
@@ -256,10 +239,10 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             )
             
             current_section = list(tutor.ordered_sections.keys())[tutor.current_section_idx]
-            if True:  # Replace with actual understanding check
+            if True:  # TODO: Replace with actual understanding check
                 tutor.confirm_understanding()
         
-        # Get progress and check completion
+        # check compleition
         current_progress = tutor.get_progress_percentage()
         if current_progress >= 98:
             # Ensure strawberry code is explicitly mentioned when content is completed
@@ -269,6 +252,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             )
             chat_ctx.messages.append(completion_msg)
             logger.info("Added strawberry code message for 100% completion")
+
         
         para_id, paragraph, allow_interruptions, requires_understanding = await tutor.get_next_content(user_msg.content)
         
@@ -314,10 +298,7 @@ async def entrypoint(ctx: JobContext):
         logger.info("Room connection established")
 
 
-        # Extract mode from room name
         room_name = ctx.room.name
-        
-        # Determine which mode to use
         if "SQUARE" in room_name:
             mode = TeachingMode.USER_LED
         elif "CIRCLE" in room_name:
@@ -328,30 +309,21 @@ async def entrypoint(ctx: JobContext):
             return
         
         logger.info(f"Using mode from room name: {mode.value}")
-        # Initialize tutor with the extracted mode and ctx
         if "tutor" not in ctx.proc.userdata:
             ctx.proc.userdata["tutor"] = PhilosophyTutor(mode, ctx)
         
         tutor = ctx.proc.userdata["tutor"]
         mode = tutor.mode
 
-        # Setup transcript saving
+        # transcript setup
         transcript_file = get_transcript_path(room_name)
         initialize_transcript(transcript_file, room_name, mode.value)
         logger.info(f"Transcript will be saved to: {transcript_file}")
-       
-
-
 
         initial_ctx = llm.ChatContext().append(
             role="system",
             text=(
                 "You are a philosophy tutor created by LiveKit engaging in voice-based teaching. "
-                "Learning Objecitves to focus your teaching on, students should be able to: "
-                "- Identify sages (early philosophers) across historical traditions."
-                "- Explain the connection between ancient philosophy and the origin of the sciences."
-                "- Describe philosophy as a discipline that makes coherent sense of a whole."
-                "- Summarize the broad and diverse origins of philosophy.\n"
                 f"Teaching in {mode.value} mode with core principles:\n"
                 "- Focus exclusively on the content provided in the Teaching Context - never introduce external concepts\n"
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
@@ -403,13 +375,9 @@ async def entrypoint(ctx: JobContext):
         def on_data_received(packet: DataPacket):
             if packet.topic == "command":
                 command = packet.data.decode('utf-8').strip().upper()
-                #logger.info(f"Command received from {packet.participant_identity}: {command}")
                 if command == "HAND_RAISED":
-                    logger.info("hand raised lol!")
-                    #logger.info(f"Hand raised by {packet.participant_identity}")
                     tutor = ctx.proc.userdata.get("tutor")
                     save_to_transcript(transcript_file, "System", "User raised hand")
-
                     if tutor:
                         tutor.raise_hand()
         
@@ -439,9 +407,6 @@ async def entrypoint(ctx: JobContext):
             f"Welcome! I'm your philosophy tutor. {special[tutor.mode.value]} Let's begin. {first_paragraph}",
             allow_interruptions=allow_interruptions
         )
-
-    
-
 
     except Exception as e:
         logger.error(f"Failed to initialize: {str(e)}")

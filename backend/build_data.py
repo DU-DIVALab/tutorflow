@@ -30,6 +30,10 @@ async def main() -> None:
         idx_builder = rag.annoy.IndexBuilder(f=embeddings_dimension, metric="angular")
 
         paragraphs_by_uuid = {}
+        
+        
+
+
         for p in tokenize.basic.tokenize_paragraphs(raw_data):
             p_uuid = uuid.uuid4()
             paragraphs_by_uuid[p_uuid] = p
