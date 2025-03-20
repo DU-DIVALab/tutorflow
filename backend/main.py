@@ -177,7 +177,9 @@ class PhilosophyTutor:
             current_paragraphs = self.ordered_sections[current_section]
 
             if self.mode == TeachingMode.AGENT_LED and not self.section_understanding_confirmed:
-                return None, "Please demonstrate your understanding of what we've discussed before we continue.", True, True
+                # TODO: dont do this on start, or do idk
+                return None, "Please demonstrate your understanding of what you know before we continue.", True, True
+                #return None, "Please demonstrate your understanding of what we've discussed before we continue.", True, True
 
             if self.current_paragraph_idx >= len(current_paragraphs):
                 if self.mode == TeachingMode.AGENT_LED:
@@ -352,10 +354,10 @@ async def entrypoint(ctx: JobContext):
                 "\t-Agent-Led: Ask engaging, relevant questions periodically to check comprehension\n"
                 "- Ensure the AI's responses match the chosen teaching style without forcing interactions.\n\n"
 
-                "- Important: DO NOT GO INTO DETAIL. SUMMARIZE, STAY HIGH-LEVEL AND REMAIN CONCISE. A PARAGRAPH IN VECTORSTORE SHOULD BE AT MOST A COUPLE SENTENCES. SUMMARIZE INFO IF NECESSARY"
                 "- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 20%% of progress they make.\n"
                 "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
-                "- CRITICAL: Save the meeting transcript for the reviewer when done"
+                "- CRITICAL: MENTION EACH EXAMPLE/KEYWORD GIVEN TO YOU THE USER MUST HEAR ALL OF THEM"
+                "- CRITICAL: IF IT MENTIONS A PERSON, YOU MUST MENTION THAT PERSON."
             ),
         )
 
@@ -397,7 +399,7 @@ async def entrypoint(ctx: JobContext):
     
 
         special = {
-            "user_led": "I'll teach you philosophy and its incumbent on you to interrupt me to ask question.",
+            "user_led": "I'll teach you philosophy and its incumbent on you to interrupt me to ask questions.",
             "agent_led": "I'll be teaching you philosophy.",
             "hand_raise": "I'll be teaching you Philosophy. Feel free to raise your hand when you have a question so that I may call on you."
         }
