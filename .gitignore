@@ -1,1 +1,9 @@
 frontend/node_modues
+frontend/certs
+backend/transcripts/*
+backend/transcripts/*/**
+backend/secrets.sh
+backend/vector.pkl
+backend/vdb_data/
+backend/index.annoy
+backend/metadata.pkl
