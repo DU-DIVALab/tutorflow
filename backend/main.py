@@ -360,7 +360,7 @@ async def entrypoint(ctx: JobContext):
                 "- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 33%% of progress they make.\n"
                 "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
                 "- CRITICAL: MENTION EACH EXAMPLE/KEYWORD GIVEN TO YOU THE USER MUST HEAR ALL OF THEM"
-                "- CRITICAL: IF IT MENTIONS A PERSON, YOU MUST MENTION THAT PERSON."`
+                "- CRITICAL: IF IT MENTIONS A PERSON, YOU MUST MENTION THAT PERSON."
             ),
         )
 
