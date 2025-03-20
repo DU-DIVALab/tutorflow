@@ -25,6 +25,15 @@ LEARNING_OBJECTIVES = [
     "Summarize the broad and diverse origins of philosophy."
 ]
 
+REVIEW_QUESTIONS = [
+    "What are some common characteristics of ancient sages in the Greek, Indian, and Chinese traditions?",
+    "What characteristics are essential for being identified as a “sage”?",
+    "What is the connection between sages and philosophers?",
+    "Provide one example of an ancient philosopher or sage who was doing something like natural science. What made this philosopher's activity scientific?",
+    "What does it mean for philosophy to “have an eye on the whole”? How is this different from other disciplines?",
+    "Why is it necessary for philosophers to discard suppositions or assumptions that may be acceptable in other disciplines?"
+]
+
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("OPENAI_API_KEY environment variable not set")
@@ -52,6 +61,8 @@ async def _generate_summary(paragraphs, http_session: aiohttp.ClientSession) -> 
         "You are a philosophy professor creating concise teaching material. "
         "Generate a summary focused specifically on these learning objectives:\n" + 
         "\n".join(f"- {obj}" for obj in LEARNING_OBJECTIVES) + 
+        "Content summarized must be structured in a way to answer questions like the example review questions:\n" + 
+        "\n".join(f"- {obj}" for obj in REVIEW_QUESTIONS) + 
         "\n\nYour summary should be comprehensive enough to teach from, but concise and "
         "focused only on these objectives. Include key examples of sages from different "
         "traditions, clear explanations of philosophy's connection to sciences, and the "
@@ -61,7 +72,7 @@ async def _generate_summary(paragraphs, http_session: aiohttp.ClientSession) -> 
     response = client.chat.completions.create(
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Here is the source material:\n\n{content}\n\nCreate a focused summary that addresses the learning objectives."}
+            {"role": "user", "content": f"Here is the source material:\n\n{content}\n\nCreate a summary that addresses the learning objectives while not omiting any key concepts or ideas:"}
         ],
         model="gpt-4-turbo",
         temperature=0.3,

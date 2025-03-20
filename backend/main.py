@@ -266,9 +266,9 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             
             mode_instructions = ""
             if tutor.mode == TeachingMode.AGENT_LED:
-                mode_instructions = "Ensure user understanding before proceeding. Ask specific questions about the content to gauge understanding, not opinions."
+                mode_instructions = "Ensure user understanding before proceeding. Ask specific questions about the content to gauge understanding, not opinions. Build understanding step by step before moving forward" 
             elif tutor.mode == TeachingMode.HAND_RAISE:
-                mode_instructions = "Wait for user to raise their hand before allowing interruptions."
+                mode_instructions = "Encourage the user to ask questions at natural pauses by raising their hand. Wait for user to raise their hand before allowing interruptions."
                 if tutor.hand_raised:
                     tutor.lower_hand() 
                     agent.allow_interruptions = True
@@ -283,10 +283,18 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             context_msg = llm.ChatMessage.create(
                 text=f"""Teaching Context:
 Content: {paragraph}
+
+STRICT RULES:
+1. ONLY teach what's explicitly contained in the above content
+2. You must teach every concept, theory and factoid mentioned
+3. Do NOT introduce ANY external concepts, theories, or thinkers
+
 Instructions: Use ONLY the above content to respond. {mode_instructions}
 Avoid external knowledge. For off-topic questions, redirect to related material topics.""",
                 role="system",
             )
+
+
             chat_ctx.messages[-1] = context_msg
             chat_ctx.messages.append(user_msg)
             
@@ -332,30 +340,24 @@ async def entrypoint(ctx: JobContext):
                 f"Teaching in {mode.value} mode with core principles:\n"
                 "- Focus exclusively on the content provided in the Teaching Context - never introduce external concepts\n"
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
-                "- Do not sound like you are reading off a textbook\n"
+                # "- Do not sound like you are reading off a textbook\n"
                 "- Use disfluencies like 'uh' 'uhm' and 'like' to sound more human\n"
                 "- Add connections to the modern student's life experiences\n"
                 "- Present ideas progressively, one concept at a time for better understanding\n"
                 "- Keep explanations concise and high-level while ensuring understanding. It is important to stay concise.\n\n"
                 "Your teaching approach:\n"
-                "- Introduce concepts individually with brief, focused explanations\n"
-                "- Summarize bigger ideas to maintain user engagement\n"
+                # "- Introduce concepts individually with brief, focused explanations\n"
+                # "- Summarize bigger ideas to maintain user engagement\n"
                 "- Use short, relevant examples when clarifying points\n"
-                "- Keep responses short, crisp, and targeted to maintain engagement\n"
-                "- Build understanding step by step before moving forward\n\n"
+                "- Keep responses short, crisp, and targeted to maintain engagement\n\n"
                 "Interaction guidelines:\n"
                 "- Maintain a brisk but comprehensible pace\n"
                 "- Do not ask the user about their opinion, ever\n"
                 "- For off-topic questions, acknowledge briefly then guide back to the current topic\n"
-                "- Never reference document structure, sections, or figures\n"
                 "- Keep the conversation flowing naturally without sounding like you're reading from a text\n"
                 "- If a topic isn't in your teaching materials, acknowledge the user's question but steer them back to related concepts within your content instead of saying you don't know\n"
                 "- Check understanding regularly through natural conversation\n"
                 "- Maintain a brisk but comprehensible pace while adapting based on the following teaching modes: \n"
-                "\t-User Led: Allow the user to interrupt at any time and adjust explanations based on their input\n."
-                "\t-Hand Raise: Encourage the user to ask questions at natural pauses.\n"
-                "\t-Agent-Led: Ask engaging, relevant questions periodically to check comprehension\n"
-                "- Ensure the AI's responses match the chosen teaching style without forcing interactions.\n\n"
 
                 "- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 33%% of progress they make.\n"
                 "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
