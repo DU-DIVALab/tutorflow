@@ -209,7 +209,7 @@ class PhilosophyTutor:
             logger.error(f"Error in get_next_content: {e}")
             return None, "I apologize, but I encountered an error. Let's try to continue.", True, False
 
-async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext, tutor: PhilosophyTutor):
+async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext, tutor: PhilosophyTutor, ctx: JobContext):
     try:
         user_msg = chat_ctx.messages[-1]
         
@@ -253,6 +253,11 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                 role="system",
             )
             chat_ctx.messages.append(completion_msg)
+            asyncio.create_task(ctx.room.local_participant.publish_data(
+                        payload="strawberry",
+                        reliable=True,
+                        topic="command"
+            ))
             logger.info("Added strawberry code message for 100% completion")
 
         
@@ -367,7 +372,7 @@ async def entrypoint(ctx: JobContext):
             stt=deepgram.STT(),
             llm=openai.LLM(model="gpt-4o-mini"),
             tts=openai.TTS(),
-            before_llm_cb=lambda a, c: _teaching_enrichment(a, c, tutor),
+            before_llm_cb=lambda a, c: _teaching_enrichment(a, c, tutor, ctx),
             turn_detector=turn_detector.EOUModel(),
         )
 
