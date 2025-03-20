@@ -1,7 +1,5 @@
 # TODO: help! our agent skips over whatever its talking about if the user butts in and just says ok
 # TODO: (frontend) make it go back to ignoring the user unless their hand is raised (maybe?) i think this might be a backend thing actually
-
-# FIXME: strawberry glitch(?)
 # FIXME: only agent led should ask if user follows along (??)
 
 
