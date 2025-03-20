@@ -347,7 +347,7 @@ async def entrypoint(ctx: JobContext):
             role="system",
             text=(
                 "You are a philosophy tutor created by LiveKit engaging in voice-based teaching. "
-                "Learning Objecitves: "
+                "Learning Objecitves to focus your teaching on, students should be able to: "
                 "- Identify sages (early philosophers) across historical traditions."
                 "- Explain the connection between ancient philosophy and the origin of the sciences."
                 "- Describe philosophy as a discipline that makes coherent sense of a whole."
