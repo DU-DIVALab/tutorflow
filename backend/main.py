@@ -333,6 +333,16 @@ async def entrypoint(ctx: JobContext):
         initialize_transcript(transcript_file, room_name, mode.value)
         logger.info(f"Transcript will be saved to: {transcript_file}")
 
+
+        specific_a = """- Add connections to the modern student's life experiences\n
+- Present ideas progressively, one concept at a time for better understanding
+"""
+        specific_b = """
+
+"""
+        if mode == TeachingMode.USER_LED:
+            specific_a = "- Move on to the next topic only when the USER decides they want to"
+            specific_b = ""
         initial_ctx = llm.ChatContext().append(
             role="system",
             text=(
@@ -342,8 +352,7 @@ async def entrypoint(ctx: JobContext):
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
                 # "- Do not sound like you are reading off a textbook\n"
                 "- Use disfluencies like 'uh' 'uhm' and 'like' to sound more human\n"
-                "- Add connections to the modern student's life experiences\n"
-                "- Present ideas progressively, one concept at a time for better understanding\n"
+                f"{specific_a}"
                 "- Keep explanations concise and high-level while ensuring understanding. It is important to stay concise.\n\n"
                 "Your teaching approach:\n"
                 # "- Introduce concepts individually with brief, focused explanations\n"
@@ -404,7 +413,7 @@ async def entrypoint(ctx: JobContext):
     
 
         special = {
-            "user_led": "I'll teach you philosophy and its incumbent on you to interrupt me to ask questions.",
+            "user_led": "I'll teach you philosophy and its incumbent on you to interrupt me to ask questions and move on to new parts of the material.",
             "agent_led": "I'll be teaching you philosophy.",
             "hand_raise": "I'll be teaching you Philosophy. Feel free to raise your hand when you have a question so that I may call on you."
         }
