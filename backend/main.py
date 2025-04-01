@@ -263,7 +263,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             logger.info("(User) is 1/3rd done the material.")
 
 
-        # TODO: pending_check should be marked true each section, if the user can answer whats the most important thing they've
+        # pending_check should be marked true each section, if the user can answer whats the most important thing they've
         # learned AND THE RESPONSE IS RELEVANT (in AGENT_LED or HAND_RAISE), we can continue to the next section.
         # in USER_LED, just continue if the user hasn't said anything by the end of the spiel or if the user said something, make sure the 
         # agent has resposnded and the user doesnt have any more to say
