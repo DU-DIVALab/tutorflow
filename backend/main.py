@@ -14,6 +14,10 @@ from livekit.plugins import deepgram, openai, rag, silero, turn_detector
 from livekit.rtc.room import DataPacket
 from openai import OpenAI
 
+from typing import Annotated
+
+from livekit.agents import llm
+from livekit.agents.pipeline import VoicePipelineAgent
 import asyncio
 
 # Configure logging
@@ -77,6 +81,15 @@ async def entrypoint(ctx: JobContext):
                 f"{mode_specific_critical}"
             ),
         )
+        
+        # Queue up the first section immediatelyx
+        if tutor.current_section < len(tutor.sections): 
+            intro_context_msg = llm.ChatMessage.create(
+                text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
+                role="system"
+            )
+            
+            initial_ctx.messages.append(intro_context_msg)
 
         agent = VoicePipelineAgent(
             chat_ctx=initial_ctx,
@@ -85,8 +98,9 @@ async def entrypoint(ctx: JobContext):
             llm=openai.LLM(model="gpt-4o-mini"),
             tts=openai.TTS(),
             before_llm_cb=lambda a, c: _teaching_enrichment(a, c, tutor, ctx),
-
             turn_detector=turn_detector.EOUModel(),
+            interrupt_min_words=3,
+            fnc_ctx=AssistantFnc()
         )
 
         setattr(agent, "transcript_file", transcript_file)
@@ -103,8 +117,25 @@ async def entrypoint(ctx: JobContext):
         def on_transcription_received(msg):
             save_to_transcript(transcript_file, "Agent", msg.content)
 
+        def on_agent_stopped_speaking():
+            # Podcast behaviour
+            if tutor.mode == TeachingMode.USER_LED:
+                async def delayed_continue():
+                    logger.info("Agent stopped speaking")
+                    try:
+                        await asyncio.sleep(2)
+                        if agent._human_input is not None and not agent._human_input.speaking:
+                            logger.info("User isn't speaking deploying speech.")
+                            agent.chat_ctx.messages.append(llm.ChatMessage.create(text="Please do continue.", role="user"))
+                            agent._validate_reply_if_possible()
+                    except asyncio.CancelledError:
+                        logger.info("Delayed continue task cancelled")
+                
+                asyncio.create_task(delayed_continue())
+
         ctx.room.on("data_received", on_data_received)
         agent.on("agent_speech_committed", on_transcription_received)
+        agent.on("agent_stopped_speaking", on_agent_stopped_speaking)
         # agent.on talked, prompt a continue el o el for user led mode??
 
         agent.start(ctx.room)
@@ -118,17 +149,8 @@ async def entrypoint(ctx: JobContext):
 
 
         welcome_message = f"Welcome! I'm your philosophy tutor. {cases[tutor.mode.value]} Let's begin."
-        await agent.say(welcome_message, allow_interruptions=True)
-
-        # Start first section immediately
-        if tutor.current_section < len(tutor.sections):
-            first_section = f"Let's start with our first topic. {tutor.sections[tutor.current_section]}"
-            await agent.say(first_section, allow_interruptions=True)
-            
-            # For USER_LED mode, set up auto-continuation
-            if tutor.mode == TeachingMode.USER_LED:
-                asyncio.create_task(tutor.continue_teaching(agent))
-
+        await agent.say(welcome_message, allow_interruptions=True)        
+        agent._validate_reply_if_possible()
     
         
     except Exception as e:
@@ -141,6 +163,18 @@ class TeachingMode(Enum):
     USER_LED = "user_led"
     AGENT_LED = "agent_led"
     HAND_RAISE = "hand_raise"
+
+class AssistantFnc(llm.FunctionContext):
+
+    @llm.ai_callable()
+    async def get_easter_egg(
+        self,
+        #location: Annotated[str, llm.TypeInfo(description="The location to get the weather for")],
+    ):
+        """Called when the user asks for an easter egg."""
+        return "the easter egg is 'how did we get here'"
+
+
 
 class PhilosophyTutor:
     def __init__(self, mode: TeachingMode, ctx):
@@ -163,53 +197,60 @@ class PhilosophyTutor:
         self.hand_raised = False
         logger.info("Hand lowered")
 
-    async def continue_teaching(self, agent):
-        if self.mode == TeachingMode.USER_LED and self.current_section < len(self.sections):
-            try:
-                logger.info(f"continuing teaching {self.current_section}")
-                # small delay to make it feel more natural
-                await asyncio.sleep(0.5)
-                await agent.say(self.sections[self.current_section], allow_interruptions=True)
-                self.current_section += 1
-                
-                # schedule if exists
-                if self.current_section < len(self.sections):
-                    current_progress = (self.current_section / len(self.sections)) * 100
-                    if current_progress > 0 and current_progress % 33 < 33 / len(self.sections):
-                        progress_message = f"We've covered about {int(current_progress)}% of the material. "
-                        await agent.say(progress_message, allow_interruptions=True)
-                    
-                    # do schedule
-                    asyncio.create_task(self.continue_teaching(agent))
-                elif self.current_section >= len(self.sections):
-                    await agent.say("Congratulations on completing all the material! Your code is strawberry.", allow_interruptions=True)
-                    asyncio.create_task(self.ctx.room.local_participant.publish_data(
-                        payload="strawberry",
-                        reliable=True,
-                        topic="command"
-                    ))
-            except Exception as e:
-                logger.error(f"Error in continue_teaching: {e}", exc_info=True)
 
 async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext, tutor: PhilosophyTutor, ctx: JobContext):
     try:
         user_msg = chat_ctx.messages[-1]
         if user_msg.role == "user":# and tutor.has_started:
             logger.info("User message detected, handling interruption")
-            if tutor.pending_check:
 
-                response_relevance = evaluate_response_relevance(user_msg.text, tutor.sections[tutor.current_section])
-                if response_relevance:
-                    logger.info("User response is relevant, advancing to next section")
-                    tutor.pending_check = False
+            if tutor.mode != TeachingMode.USER_LED:
+                if tutor.pending_check:
+                    response_relevance = evaluate_response_relevance(user_msg.text, tutor.sections[tutor.current_section])
+                    logger.info(chat_ctx.messages)
+                    logger.info("\n\n\n\n\n\n\n")
+                    if response_relevance:
+                        logger.info("User response is relevant, advancing to next section")
+                        tutor.pending_check = False
+                        tutor.current_section += 1
+                        if tutor.current_section < len(tutor.sections):
+                            # For AGENT_LED and HAND_RAISE, schedule next section after response
+                            if tutor.current_section < len(tutor.sections): 
+                                new_context_msg = llm.ChatMessage.create(
+                                    text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
+                                    role="system"
+                                )
+                                
+                                chat_ctx.messages.append(new_context_msg)
+
+                        elif tutor.current_section >= len(tutor.sections):
+                            await agent.say("Congratulations on completing all the material! Your code is strawberry.", allow_interruptions=True)
+                            asyncio.create_task(ctx.room.local_participant.publish_data(
+                                payload="strawberry",
+                                reliable=True,
+                                topic="command"
+                            ))
+                    else:
+                        # Keep pending_check true and ask again for AGENT_LED and HAND_RAISE
+                        follow_up_msg = llm.ChatMessage.create(
+                            text="The user's response wasn't directly relevant to the material. Gently guide them back to the key concepts and ask again what they found most important.",
+                            role="system",
+                        )
+                        chat_ctx.messages.append(follow_up_msg)
+                else:
+                    # POINT OF INTEREST: only continue if either the user didnt ask a question or for clarification or the user did and is satisfied with the answer and stopped talking
+                    logger.info("User led mode, no questions, advancing to next section")
+                    logger.info(chat_ctx.messages)
+                    logger.info("\n\n\n\n\n\n\n")
                     tutor.current_section += 1
                     if tutor.current_section < len(tutor.sections):
-                        if tutor.mode != TeachingMode.USER_LED:
-                            # For AGENT_LED and HAND_RAISE, schedule next section after response
-                            asyncio.create_task(schedule_next_section(agent, tutor))
-                        else:
-                            # For USER_LED, continue automatically
-                            asyncio.create_task(tutor.continue_teaching(agent))
+                        new_context_msg = llm.ChatMessage.create(
+                            text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
+                            role="system"
+                        )
+                        
+                        chat_ctx.messages.append(new_context_msg)
+
                     elif tutor.current_section >= len(tutor.sections):
                         await agent.say("Congratulations on completing all the material! Your code is strawberry.", allow_interruptions=True)
                         asyncio.create_task(ctx.room.local_participant.publish_data(
@@ -217,15 +258,6 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                             reliable=True,
                             topic="command"
                         ))
-                else:
-                    # Response wasn't relevant, prompt again or provide feedback
-                    if tutor.mode != TeachingMode.USER_LED:
-                        # Keep pending_check true and ask again for AGENT_LED and HAND_RAISE
-                        follow_up_msg = llm.ChatMessage.create(
-                            text="The user's response wasn't directly relevant to the material. Gently guide them back to the key concepts and ask again what they found most important.",
-                            role="system",
-                        )
-                        chat_ctx.messages.append(follow_up_msg)
                 
 
         # Check for hand raise
@@ -268,15 +300,12 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
         # in USER_LED, just continue if the user hasn't said anything by the end of the spiel or if the user said something, make sure the 
         # agent has resposnded and the user doesnt have any more to say
 
-        if tutor.sections < len(tutor.sections):
+        if tutor.current_section < len(tutor.sections):
             # Set appropriate instructions based on mode
             if tutor.mode == TeachingMode.AGENT_LED or tutor.mode == TeachingMode.HAND_RAISE:
                 tutor.pending_check = True
                 instructions = "After explaining this section, ask: 'What is the most important thing you've learned so far?'"
-            elif tutor.mode == TeachingMode.USER_LED:
-                tutor.pending_check = False
-            
-            context_msg = llm.ChatMessage.create(
+                context_msg = llm.ChatMessage.create(
                     text=f"""Teaching Context:
 Content: {tutor.sections[tutor.current_section]}
 
@@ -289,10 +318,10 @@ Instructions: Use ONLY the above content to respond. {instructions}
 Avoid external knowledge. For off-topic questions, redirect to related material topics.""",
                     role="system",
                 )
-            chat_ctx.messages[-1] = context_msg
-            chat_ctx.messages.append(user_msg)
-            #agent.allow_interruptions = allow_interruptions
-            
+                chat_ctx.messages[-1] = context_msg
+                chat_ctx.messages.append(user_msg)
+            elif tutor.mode == TeachingMode.USER_LED:
+                tutor.pending_check = False            
         
 
     except Exception as e:
@@ -307,17 +336,6 @@ def evaluate_response_relevance(user_response, current_section_content):
         return True
         
     return False
-
-async def schedule_next_section(agent, tutor):
-    try:
-        # Wait a brief moment before continuing to next section
-        await asyncio.sleep(0.2)
-        if tutor.current_section < len(tutor.sections):
-            next_section = tutor.sections[tutor.current_section]
-            # Continue teaching automatically without waiting for user input
-            await agent.say(f"Moving on to our next topic. {next_section}", allow_interruptions=True)
-    except Exception as e:
-        logger.error(f"Error scheduling next section: {e}", exc_info=True)
 
 def get_mode_from_roomname(name: str):
     if "SQUARE" in name:
