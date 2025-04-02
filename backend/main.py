@@ -20,9 +20,16 @@ from livekit.agents import llm
 from livekit.agents.pipeline import VoicePipelineAgent
 import asyncio
 
+# make it ask user q at the end and only check when asked q
+# gpt-40 resposne checker
+# hand raise interrupts
+# check end of sentence token, when a user ointerrupts set a flag, unset it 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("philosophy-tutor")
+
+SPOOF_CONTINUE = "Please do continue."
 
 async def entrypoint(ctx: JobContext):
     try:
@@ -74,7 +81,7 @@ async def entrypoint(ctx: JobContext):
                 "- CRITICAL: Wait for teaching content to be provided before beginning the lesson\n"
                 "- CRITICAL: Do not introduce any theories or concepts until explicit content is provided\n"
 
-                "- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 33%% of progress they make.\n"
+                #"- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 33%% of progress they make.\n"
                 "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
                 "- CRITICAL: MENTION EACH EXAMPLE/KEYWORD GIVEN TO YOU THE USER MUST HEAR ALL OF THEM\n"
                 "- CRITICAL: IF IT MENTIONS A PERSON, YOU MUST MENTION THAT PERSON.\n"
@@ -82,7 +89,7 @@ async def entrypoint(ctx: JobContext):
             ),
         )
         
-        # Queue up the first section immediatelyx
+        # Queue up the first section immediately
         if tutor.current_section < len(tutor.sections): 
             intro_context_msg = llm.ChatMessage.create(
                 text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
@@ -99,7 +106,7 @@ async def entrypoint(ctx: JobContext):
             tts=openai.TTS(),
             before_llm_cb=lambda a, c: _teaching_enrichment(a, c, tutor, ctx),
             turn_detector=turn_detector.EOUModel(),
-            interrupt_min_words=3,
+            allow_interruptions=True,
             fnc_ctx=AssistantFnc()
         )
 
@@ -117,32 +124,79 @@ async def entrypoint(ctx: JobContext):
         def on_transcription_received(msg):
             save_to_transcript(transcript_file, "Agent", msg.content)
 
+
+        def on_agent_started_speaking():
+            logger.info("Agent started speaking, any user speech is an interruption")
+            tutor.is_interruption = True
+            tutor.speaking = True
+
         def on_agent_stopped_speaking():
+            tutor.speaking = False
             # Podcast behaviour
-            if tutor.mode == TeachingMode.USER_LED:
-                async def delayed_continue():
-                    logger.info("Agent stopped speaking")
+            # FIXME: make sure PDC message isn't sent unless we reach an actual end lol
+            # like the end of the thing and not a fake end :/
+            logger.info("Agent stopped speaking...")
+            if agent._human_input is not None and not agent._human_input.speaking:
+                tutor.is_interruption = False
+                async def delayed_action():
+                    logger.info("Delayed continue initiated")
                     try:
                         await asyncio.sleep(2)
-                        if agent._human_input is not None and not agent._human_input.speaking:
-                            logger.info("User isn't speaking deploying speech.")
-                            agent.chat_ctx.messages.append(llm.ChatMessage.create(text="Please do continue.", role="user"))
-                            agent._validate_reply_if_possible()
+                        if agent._human_input is not None and not agent._human_input.speaking and not tutor.speaking:
+                            if tutor.mode == TeachingMode.USER_LED:
+                                if agent.chat_ctx.messages[-1].role == "assistant":
+
+                                    # if not tutor.is_interruption:
+                                    # Agent was told "Please Do Continue." in USER_LED mode. Obviously not an interruption.
+                                    logger.info("Moving on to the next section in USER_LED mode..")
+                                    tutor.next_section()
+                                    await progress_check(agent, tutor)
+                                    if tutor.current_section < len(tutor.sections):
+                                        new_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
+                                        agent.chat_ctx.messages.append(new_context_msg)
+                                        #agent.say("Moving on, ")
+                                        agent._validate_reply_if_possible() # ^r->vl
+                                    else:
+                                        strawberry_notice(agent.chat_ctx, ctx)
+
+                                    # logger.info("In user led mode, last msg from agent: Please Continue")
+                                    # agent.chat_ctx.messages.append(llm.ChatMessage.create(text=SPOOF_CONTINUE, role="user"))
+                                    # logger.info("PDC message sent out")
+                                    # agent._validate_reply_if_possible()
+                            #else:
+                                #tutor.is_interruption = False
+
+
                     except asyncio.CancelledError:
                         logger.info("Delayed continue task cancelled")
                 
-                asyncio.create_task(delayed_continue())
+                asyncio.create_task(delayed_action())
+            
+
+        def on_user_started_speaking():
+            logger.info("User started speaking...")
+            tutor.user_speaking = True
+            #tutor.is_interruption = True
+        
+        def on_user_stopped_speaking():
+            tutor.user_speaking = False
+        
 
         ctx.room.on("data_received", on_data_received)
         agent.on("agent_speech_committed", on_transcription_received)
+
+        agent.on("agent_started_speaking", on_agent_started_speaking)
         agent.on("agent_stopped_speaking", on_agent_stopped_speaking)
-        # agent.on talked, prompt a continue el o el for user led mode??
+        agent.on("user_started_speaking", on_user_started_speaking)
+
+        agent.on("user_stopped_speaking", on_user_stopped_speaking)
+        #agent.on("", on_user_started_speaking)
 
         agent.start(ctx.room)
         logger.info("Agent started successfully")
 
         cases = {
-            "user_led": "I'll be teaching you philosophy in a continuous lecture format without pauses. So, it's incumbent on you to ask questions or for clarification.",
+            "user_led": "I'll be teaching you philosophy in a continuous lecture format without pauses. So, it's incumbent on you to interrupt me to ask questions or for clarification.",
             "agent_led": "I'll be teaching you philosophy concepts assuming no prior knowledge.",
             "hand_raise": "I'll be teaching you philosophy. Feel free to raise your hand when you have a question so that I may call on you."
         }
@@ -177,159 +231,121 @@ class AssistantFnc(llm.FunctionContext):
 
 
 class PhilosophyTutor:
-    def __init__(self, mode: TeachingMode, ctx):
+    def __init__(self, mode: TeachingMode, ctx: JobContext):
         self.ctx = ctx
         self.mode = mode
 
         self.current_section = 0
-        self.sections = list(extract_markdown_sections(open("summary.md", "r", encoding="utf-8").read()).values()) # holy moly
+        self.sections = list(split_summary_into_sections(open("summary.md", "r", encoding="utf-8").read()).values()) # holy moly
         self.hand_raised = False
 
         self.pending_check = False
+
+        self.is_interruption = False
+        self.speaking = False
+        self.user_speaking = False
         
         logger.info(f"Initialized tutor with {len(self.sections)} total sections in {mode.value} mode")
     
+    def next_section(self):
+        logger.info("Phasing to next section.")
+        self.current_section += 1
+        self.pending_check = True
+
     def raise_hand(self):
-        self.hand_raised = True
-        logger.info("Hand raised")
+        if self.mode == TeachingMode.HAND_RAISE and not self.hand_raised:
+            self.hand_raised = True
+            logger.info("Hand raised initiating...")
+            asyncio.create_task(self.ctx.agent.say("I see you've raised your hand. What's your question?", allow_interruptions = True))
 
     def lower_hand(self):
         self.hand_raised = False
         logger.info("Hand lowered")
 
 
+
+async def progress_check(agent: VoicePipelineAgent, tutor: PhilosophyTutor):
+    logger.info("running progress check...")
+    if tutor.current_section == len(tutor.sections) // 3:
+        await agent.say("You're a third of the way through the material! Keep up the great work.")
+        logger.info("(User) is 1/3rd done the material.")
+    if tutor.current_section == len(tutor.sections) // 2:
+        await agent.say("You're halfway through the material! Keep up the great work.")
+        logger.info("(User) is halfway done the material.")
+    if tutor.current_section == (2 * len(tutor.sections)) // 3:
+        await agent.say("You're two-thirds of the way through the material! Keep up the great work.")
+        logger.info("(User) is 2/4rd done the material.")
+
+def strawberry_notice(chat_ctx: llm.ChatContext, ctx: JobContext):
+    # Ensure strawberry code is explicitly mentioned when content is completed
+    completion_msg = llm.ChatMessage.create(
+        text="CRITICAL: The user has completed the material! Make sure to tell them: 'Congratulations on completing all the material! Your code is strawberry.' This is extremely important.",
+        role="system",
+    )
+    chat_ctx.messages.append(completion_msg)
+    
+    # Send data to frontend
+    asyncio.create_task(ctx.room.local_participant.publish_data(
+                payload="strawberry",
+                reliable=True,
+                topic="command"
+    ))
+    logger.info("Added strawberry code message for 100% completion")
+
 async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext, tutor: PhilosophyTutor, ctx: JobContext):
     try:
         user_msg = chat_ctx.messages[-1]
-        if user_msg.role == "user":# and tutor.has_started:
-            logger.info("User message detected, handling interruption")
-
-            if tutor.mode != TeachingMode.USER_LED:
+        if user_msg.role == "user":
+            logger.info("User message detected, running _teaching_enrichment")
+            if tutor.mode != TeachingMode.USER_LED and user_msg.content != SPOOF_CONTINUE:
                 if tutor.pending_check:
-                    response_relevance = evaluate_response_relevance(user_msg.text, tutor.sections[tutor.current_section])
-                    logger.info(chat_ctx.messages)
-                    logger.info("\n\n\n\n\n\n\n")
-                    if response_relevance:
-                        logger.info("User response is relevant, advancing to next section")
-                        tutor.pending_check = False
-                        tutor.current_section += 1
+                    understood = evaluate_understanding_from_response(user_msg.text, tutor.sections[tutor.current_section])
+                    if understood:
+                        logger.info("Moving on to the next section in an AGENT* mode")
+                        tutor.next_section()
+                        await progress_check(agent, tutor)
+
                         if tutor.current_section < len(tutor.sections):
-                            # For AGENT_LED and HAND_RAISE, schedule next section after response
-                            if tutor.current_section < len(tutor.sections): 
-                                new_context_msg = llm.ChatMessage.create(
-                                    text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
-                                    role="system"
-                                )
-                                
-                                chat_ctx.messages.append(new_context_msg)
-
-                        elif tutor.current_section >= len(tutor.sections):
-                            await agent.say("Congratulations on completing all the material! Your code is strawberry.", allow_interruptions=True)
-                            asyncio.create_task(ctx.room.local_participant.publish_data(
-                                payload="strawberry",
-                                reliable=True,
-                                topic="command"
-                            ))
+                            new_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
+                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?'", role="system")
+                            chat_ctx.messages.append(new_context_msg)  
+                            chat_ctx.messages.append(question_p)
+                            #agent.say("Moving on, ")
+                            #agent._validate_reply_if_possible() # ^r->vl
+                        else:
+                            strawberry_notice(chat_ctx, ctx)
                     else:
-                        # Keep pending_check true and ask again for AGENT_LED and HAND_RAISE
-                        follow_up_msg = llm.ChatMessage.create(
-                            text="The user's response wasn't directly relevant to the material. Gently guide them back to the key concepts and ask again what they found most important.",
-                            role="system",
-                        )
-                        chat_ctx.messages.append(follow_up_msg)
+                        # not understood
+                        pass
                 else:
-                    # POINT OF INTEREST: only continue if either the user didnt ask a question or for clarification or the user did and is satisfied with the answer and stopped talking
-                    logger.info("User led mode, no questions, advancing to next section")
-                    logger.info(chat_ctx.messages)
-                    logger.info("\n\n\n\n\n\n\n")
-                    tutor.current_section += 1
-                    if tutor.current_section < len(tutor.sections):
-                        new_context_msg = llm.ChatMessage.create(
-                            text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
-                            role="system"
-                        )
-                        
-                        chat_ctx.messages.append(new_context_msg)
-
-                    elif tutor.current_section >= len(tutor.sections):
-                        await agent.say("Congratulations on completing all the material! Your code is strawberry.", allow_interruptions=True)
-                        asyncio.create_task(ctx.room.local_participant.publish_data(
-                            payload="strawberry",
-                            reliable=True,
-                            topic="command"
-                        ))
-                
-
-        # Check for hand raise
-        if tutor.hand_raised:
-            logger.info("Hand raised detected in teaching_enrichment")
-            hand_raise_msg = llm.ChatMessage.create(
-                text="The user has raised their hand. Finish your current sentence, then respond with 'I see you've raised your hand. What's your question?' and wait for their input.",
-                role="system",
-            )
-            chat_ctx.messages[-1] = hand_raise_msg
-            chat_ctx.messages.append(user_msg)
-            agent.allow_interruptions = True
-            return
+                    pass # never happens
 
 
-        if tutor.current_section == len(tutor.sections):
-            # Ensure strawberry code is explicitly mentioned when content is completed
-            completion_msg = llm.ChatMessage.create(
-                text="CRITICAL: The user has completed the material! Make sure to tell them: 'Congratulations on completing all the material! Your code is strawberry.' This is extremely important.",
-                role="system",
-            )
-            chat_ctx.messages.append(completion_msg)
-            asyncio.create_task(ctx.room.local_participant.publish_data(
-                        payload="strawberry",
-                        reliable=True,
-                        topic="command"
-            ))
-            logger.info("Added strawberry code message for 100% completion")
-        if tutor.current_section == len(tutor.sections) // 2:
-            await agent.say("You're halfway through the material! Keep up the great work.")
-            logger.info("(User) is halfway done the material.")
 
-        if tutor.current_section == len(tutor.sections) // 3:
-            await agent.say("You're a third of the way through the material! Keep up the great work.")
-            logger.info("(User) is 1/3rd done the material.")
-
-
-        # pending_check should be marked true each section, if the user can answer whats the most important thing they've
-        # learned AND THE RESPONSE IS RELEVANT (in AGENT_LED or HAND_RAISE), we can continue to the next section.
-        # in USER_LED, just continue if the user hasn't said anything by the end of the spiel or if the user said something, make sure the 
-        # agent has resposnded and the user doesnt have any more to say
-
-        if tutor.current_section < len(tutor.sections):
-            # Set appropriate instructions based on mode
-            if tutor.mode == TeachingMode.AGENT_LED or tutor.mode == TeachingMode.HAND_RAISE:
-                tutor.pending_check = True
-                instructions = "After explaining this section, ask: 'What is the most important thing you've learned so far?'"
-                context_msg = llm.ChatMessage.create(
-                    text=f"""Teaching Context:
-Content: {tutor.sections[tutor.current_section]}
-
-STRICT RULES:
-1. ONLY teach what's explicitly contained in the above content
-2. You must teach every concept, theory and factoid mentioned
-3. Do NOT introduce ANY external concepts, theories, or thinkers
-
-Instructions: Use ONLY the above content to respond. {instructions}
-Avoid external knowledge. For off-topic questions, redirect to related material topics.""",
-                    role="system",
-                )
-                chat_ctx.messages[-1] = context_msg
-                chat_ctx.messages.append(user_msg)
-            elif tutor.mode == TeachingMode.USER_LED:
-                tutor.pending_check = False            
+                if not tutor.is_interruption:
+                    # Not interrupted in user led mode, we should be asking the user a question (MAYBE) or checking if thier
+                    # response is indicitive of understanding
+                    pass
+                else:
+                    # Interrupted in user led mode, we should check if the response belies understanding 
+                    pass
+            
+            elif tutor.mode == TeachingMode.USER_LED and user_msg.content == SPOOF_CONTINUE:
+                pass # not handled in on_agent_stopped_speaking
+                    
+            else:
+                logger.info(user_msg)
+                # Either not in user led mode but was sent spoof continue (should never happen)
+                # or in user led mode but was interrupted (seriously doesn't matter)
+                pass
+    
         
-
     except Exception as e:
         logger.error(f"Error in teaching enrichment: {e}", exc_info=True)
         raise
 
 
-def evaluate_response_relevance(user_response, current_section_content):
+def evaluate_understanding_from_response(user_response, message_history):
     # FIXME: LOL
     # "demonstrates awareness of their own knowledge" is the language used in that paepr [sic]
     if len(user_response.split()) > 10:
@@ -374,7 +390,7 @@ def save_to_transcript(file_path, speaker, text):
         logger.error(f"Failed to save transcript: {e}")
         return False
     
-def extract_markdown_sections(markdown_text):
+def split_summary_into_sections(markdown_text):
     heading_lines = re.findall(r'^(#{1,6}\s+.+?)$', markdown_text, re.MULTILINE)
     if not heading_lines:
         return "No headings found"
