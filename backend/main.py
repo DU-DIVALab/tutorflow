@@ -96,7 +96,7 @@ async def entrypoint(ctx: JobContext):
             initial_ctx.messages.append(intro_context_msg)
 
             if tutor.mode != TeachingMode.USER_LED:
-                question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do— telling them their previous response wasn't detailed enough.", role="system")
+                question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have or elaborate on parts of what you said and then ask the question 'What is the most important thing you've learned so far?' again until they do— telling them their previous response wasn't detailed enough.", role="system")
                 initial_ctx.messages.append(question_p)
 
         agent = VoicePipelineAgent(
@@ -306,7 +306,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
 
                         if tutor.current_section < len(tutor.sections):
                             new_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
-                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do— telling them their previous response wasn't detailed enough.", role="system")
+                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have or elaborate on parts of what you said and then ask the question 'What is the most important thing you've learned so far?' again again until they do— telling them their previous response wasn't detailed enough.", role="system")
                             chat_ctx.messages.append(new_context_msg)  
                             chat_ctx.messages.append(question_p)
                             #agent.say("Moving on, ")
@@ -368,7 +368,8 @@ If this is the case, the key is that the user 'demonstrates awareness of their o
 Here is the chat history:
 {"\\n".join(f"{msg.role}: {'' if msg.content is None else ''.join(str(item) for item in msg.content) if isinstance(msg.content, list) else str(msg.content)}" for msg in message_history[-10:])}
 
-If the user has understood this content, reply verbatim "Success" and nothing else. Otherwise, reply with "Failure". 
+If the user has understood this content, reply verbatim "Success" and nothing else. Otherwise, reply with "Failure".
+Note: The user may not skip this in ANY WAY except by demonstrating an understandining, not merely  claiming to have no questions.
 """}
         ],
         model="gpt-4-turbo",
