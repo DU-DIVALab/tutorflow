@@ -22,6 +22,19 @@ import asyncio
 
 from openai import OpenAI
 
+CHECK_UNDERSTANDING_MSG = """Then, after explaining this section, ask verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim.
+
+The user's answer is considered satisfactory —that is, the user "understands"— if and ONLY if the user "demonstrates awareness of their own knowledge".
+
+For example, if the user is learning about Confucius and all they say is "Confucius", this is not adequate. Whereas they are more detailed (while still correct) and say something like "Confucius' teachings were patriarchal", you are considered to have understood.
+Note: The user may not skip answering the question in ANY WAY except by demonstrating their understanding, not merely claiming to have no questions.
+
+IF THE USER UNDERSTANDS, SAY TO THE USER "You seem to understand this section, shall we continue?" VERBATIM. IT IS CRITICAL YOU SAY THIS VERBATIM.
+AGAIN, IF THE USER UNDERSTOOD THE SECTION SAY TO THEM VERBATIM** "You seem to understand this section, shall we continue?".
+
+If the user does not understand, answer any questions they might have or elaborate on parts of what you said and then ask the question 'What is the most important thing you've learned so far?' again until they do— telling them their previous response wasn't detailed enough."""
+
+
 # oops lol
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
@@ -97,7 +110,7 @@ async def entrypoint(ctx: JobContext):
             initial_ctx.messages.append(intro_context_msg)
 
             if tutor.mode != TeachingMode.USER_LED:
-                question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have or elaborate on parts of what you said and then ask the question 'What is the most important thing you've learned so far?' again until they do— telling them their previous response wasn't detailed enough.", role="system")
+                question_p = llm.ChatMessage.create(text=CHECK_UNDERSTANDING_MSG, role="system")
                 initial_ctx.messages.append(question_p)
 
         agent = VoicePipelineAgent(
@@ -299,7 +312,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             logger.info("User message detected, running _teaching_enrichment")
             if tutor.mode != TeachingMode.USER_LED and user_msg.content:
                 if tutor.pending_check:
-                    understood = evaluate_understanding_from_response(chat_ctx.messages, tutor.sections[tutor.current_section])
+                    understood = evaluate_understanding_from_response(chat_ctx.messages)
                     if understood:
                         logger.info("Moving on to the next section in an AGENT* mode")
                         tutor.next_section()
@@ -307,7 +320,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
 
                         if tutor.current_section < len(tutor.sections):
                             new_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
-                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have or elaborate on parts of what you said and then ask the question 'What is the most important thing you've learned so far?' again again until they do— telling them their previous response wasn't detailed enough.", role="system")
+                            question_p = llm.ChatMessage.create(text=CHECK_UNDERSTANDING_MSG, role="system")
                             chat_ctx.messages.append(new_context_msg)  
                             chat_ctx.messages.append(question_p)
                             #agent.say("Moving on, ")
@@ -345,40 +358,45 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
         raise
 
 
-def evaluate_understanding_from_response(message_history, content):
+def evaluate_understanding_from_response(message_history):
     """ 'demonstrates awareness of their own knowledge' is the language used in that paepr [sic] """
 
     # optimization lol
     flag = False
     for message in message_history[-10:]:
-        if "important thing" in message.content:
-            flag = True
-    if not flag:
-        logger.info("Failed optimization.")
-        return False
-    
-    response = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": """You are an educational evaluation assistant built to evaluate if a user has understood content or have demonstrated awareness of their own knowledge.
-Sometimes a user's response will be them asking a question. If this is the case then return "Failure". Othertimes the user will be asked to demonstrate their understanding or the most important thing they've learned so far.
-If this is the case, the key is that the user 'demonstrates awareness of their own knowledge'. That is, if the user is learning about Confucius and all they say is "Confucius", this is not adequate. If they are more detailed and say something like "Confucius' teachings were patriarchal", this is permissible and is a "Success".
-"""},
-            {"role": "user", "content": f"""Here is the content the user is supposed to have understood:
-{content}
+        if message.role != "user" and message.role != "system": # lol the user cant skip just by saing this
+                                                                # oops cant be system either
+            content = message.content.lower()
+            if ("you" in content) and ("seem" in content) and ("understood" in content or "understand" in content or "grasp" in content):
+                flag = True
+                logger.info("Moving on to next section!")
+            # if not flag:
+            #     pass
 
-Here is the chat history:
-{"\\n".join(f"{msg.role}: {'' if msg.content is None else ''.join(str(item) for item in msg.content) if isinstance(msg.content, list) else str(msg.content)}" for msg in message_history[-10:])}
-
-If the user has understood this content, reply verbatim "Success" and nothing else. Otherwise, reply with "Failure".
-Note: The user may not skip this in ANY WAY except by demonstrating an understandining, not merely  claiming to have no questions.
-"""}
-        ],
-        model="gpt-4-turbo",
-        temperature=0.3,
-    )
+    return flag
     
-    logger.info(response.choices[0].message.content.lower())
-    return "success" in response.choices[0].message.content.lower()
+#     response = client.chat.completions.create(
+#         messages=[
+#             {"role": "system", "content": """You are an educational evaluation assistant built to evaluate if a user has understood content or have demonstrated awareness of their own knowledge.
+# Sometimes a user's response will be them asking a question. If this is the case then return "Failure". Othertimes the user will be asked to demonstrate their understanding or the most important thing they've learned so far.
+# If this is the case, the key is that the user 'demonstrates awareness of their own knowledge'. That is, if the user is learning about Confucius and all they say is "Confucius", this is not adequate. If they are more detailed and say something like "Confucius' teachings were patriarchal", this is permissible and is a "Success".
+# """},
+#             {"role": "user", "content": f"""Here is the content the user is supposed to have understood:
+# {content}
+
+# Here is the chat history:
+# {"\\n".join(f"{msg.role}: {'' if msg.content is None else ''.join(str(item) for item in msg.content) if isinstance(msg.content, list) else str(msg.content)}" for msg in message_history[-10:])}
+
+# If the user has understood this content, reply verbatim "Success" and nothing else. Otherwise, reply with "Failure".
+# Note: The user may not skip this in ANY WAY except by demonstrating an understandining, not merely  claiming to have no questions.
+# """}
+#         ],
+#         model="gpt-4-turbo",
+#         temperature=0.3,
+#     )
+    
+#     logger.info(response.choices[0].message.content.lower())
+#     return "success" in response.choices[0].message.content.lower()
 
 
 def get_mode_from_roomname(name: str):
