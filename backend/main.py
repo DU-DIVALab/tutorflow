@@ -314,6 +314,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                 if tutor.pending_check:
                     understood = evaluate_understanding_from_response(chat_ctx.messages)
                     if understood:
+                        agent.chat_ctx.messages.append( llm.ChatMessage.create(text=f"Section Completed", role="system"))
                         logger.info("Moving on to the next section in an AGENT* mode")
                         tutor.next_section()
                         await progress_check(agent, tutor)
@@ -363,7 +364,7 @@ def evaluate_understanding_from_response(message_history):
 
     # optimization lol
     flag = False
-    for message in message_history[-10:]:
+    for message in reversed(message_history):
         if message.role != "user" and message.role != "system": # lol the user cant skip just by saing this
                                                                 # oops cant be system either
             content = message.content.lower()
@@ -372,6 +373,9 @@ def evaluate_understanding_from_response(message_history):
                 logger.info("Moving on to next section!")
             # if not flag:
             #     pass
+        if message.role == "system":
+            if message.content == "Section Completed.":
+                return False
 
     return flag
     
