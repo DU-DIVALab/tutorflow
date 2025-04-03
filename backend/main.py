@@ -20,10 +20,13 @@ from livekit.agents import llm
 from livekit.agents.pipeline import VoicePipelineAgent
 import asyncio
 
-# make it ask user q at the end and only check when asked q
-# gpt-40 resposne checker
-# hand raise interrupts
-# check end of sentence token, when a user ointerrupts set a flag, unset it 
+from openai import OpenAI
+
+# oops lol
+api_key = os.environ.get("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("OPENAI_API_KEY environment variable not set")
+client = OpenAI(api_key=api_key)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -93,7 +96,7 @@ async def entrypoint(ctx: JobContext):
             initial_ctx.messages.append(intro_context_msg)
 
             if tutor.mode != TeachingMode.USER_LED:
-                question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do.", role="system")
+                question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do— telling them their previous response wasn't detailed enough.", role="system")
             
             initial_ctx.messages.append(question_p)
 
@@ -298,7 +301,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
             logger.info("User message detected, running _teaching_enrichment")
             if tutor.mode != TeachingMode.USER_LED and user_msg.content:
                 if tutor.pending_check:
-                    understood = evaluate_understanding_from_response(user_msg.content, tutor.sections[tutor.current_section])
+                    understood = evaluate_understanding_from_response(chat_ctx.messages, tutor.sections[tutor.current_section])
                     if understood:
                         logger.info("Moving on to the next section in an AGENT* mode")
                         tutor.next_section()
@@ -306,7 +309,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
 
                         if tutor.current_section < len(tutor.sections):
                             new_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
-                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do.", role="system")
+                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do— telling them their previous response wasn't detailed enough.", role="system")
                             chat_ctx.messages.append(new_context_msg)  
                             chat_ctx.messages.append(question_p)
                             #agent.say("Moving on, ")
@@ -344,13 +347,40 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
         raise
 
 
-def evaluate_understanding_from_response(user_response, message_history):
-    # FIXME: LOL
-    # "demonstrates awareness of their own knowledge" is the language used in that paepr [sic]
-    if len(user_response.split()) > 10:
-        return True
-        
-    return False
+def evaluate_understanding_from_response(message_history, content):
+    """ 'demonstrates awareness of their own knowledge' is the language used in that paepr [sic] """
+
+    # optimization lol
+    flag = False
+    for message in message_history[-10:]:
+        if "important thing" in message.content:
+            flag = True
+    if not flag:
+        logger.info("Failed optimization.")
+        return False
+    
+    response = client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": """You are an educational evaluation assistant built to evaluate if a user has understood content or have demonstrated awareness of their own knowledge.
+Sometimes a user's response will be them asking a question. If this is the case then return "Failure". Othertimes the user will be asked to demonstrate their understanding or the most important thing they've learned so far.
+If this is the case, the key is that the user 'demonstrates awareness of their own knowledge'. That is, if the user is learning about Confucius and all they say is "Confucius", this is not adequate. If they are more detailed and say something like "Confucius' teachings were patriarchal", this is permissible and is a "Success".
+"""},
+            {"role": "user", "content": f"""Here is the content the user is supposed to have understood:
+{content}
+
+Here is the chat history:
+{"\\n".join(f"{msg.role}: {'' if msg.content is None else ''.join(str(item) for item in msg.content) if isinstance(msg.content, list) else str(msg.content)}" for msg in message_history[-10:])}
+
+If the user has understood this content, reply verbatim "Success" and nothing else. Otherwise, reply with "Failure". 
+"""}
+        ],
+        model="gpt-4-turbo",
+        temperature=0.3,
+    )
+    
+    logger.info(response.choices[0].message.content.lower())
+    return "success" in response.choices[0].message.content.lower()
+
 
 def get_mode_from_roomname(name: str):
     if "SQUARE" in name:
