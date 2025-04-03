@@ -374,7 +374,7 @@ def evaluate_understanding_from_response(message_history):
             # if not flag:
             #     pass
         if message.role == "system":
-            if message.content == "Section Completed.":
+            if message.content == "Section Completed":
                 return False
 
     return flag
