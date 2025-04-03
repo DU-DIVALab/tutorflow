@@ -97,8 +97,7 @@ async def entrypoint(ctx: JobContext):
 
             if tutor.mode != TeachingMode.USER_LED:
                 question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do— telling them their previous response wasn't detailed enough.", role="system")
-            
-            initial_ctx.messages.append(question_p)
+                initial_ctx.messages.append(question_p)
 
         agent = VoicePipelineAgent(
             chat_ctx=initial_ctx,
@@ -135,7 +134,6 @@ async def entrypoint(ctx: JobContext):
         def on_agent_stopped_speaking():
             tutor.speaking = False
             # Podcast behaviour
-            # FIXME: make sure PDC message isn't sent unless we reach an actual end lol
             # like the end of the thing and not a fake end :/
             logger.info("Agent stopped speaking...")
             if agent._human_input is not None and not agent._human_input.speaking:
@@ -148,7 +146,6 @@ async def entrypoint(ctx: JobContext):
                             if tutor.mode == TeachingMode.USER_LED:
                                 if agent.chat_ctx.messages[-1].role == "assistant":
 
-                                    # if not tutor.is_interruption:
                                     # Agent was told "Please Do Continue." in USER_LED mode. Obviously not an interruption.
                                     logger.info("Moving on to the next section in USER_LED mode..")
                                     tutor.next_section()
@@ -199,7 +196,7 @@ async def entrypoint(ctx: JobContext):
 
         cases = {
             "user_led": "I'll be teaching you philosophy in a continuous lecture format without pauses. So, it's incumbent on you to interrupt me to ask questions or for clarification. Let's begin.",
-            "agent_led": "I'll be teaching you philosophy concepts assuming no prior knowledge. Shall we begin?",
+            "agent_led": "I'll be teaching you philosophy concepts assuming no prior knowledge. You can interrupt me with questions anytime. I will also give you reflection questions, and you need to provide a thoughtful response before we continue. Shall we begin?",
             "hand_raise": "I'll be teaching you philosophy. Feel free to raise your hand when you have a question so that I may call on you. Shall we begin?"
         }
 
@@ -420,26 +417,7 @@ def save_to_transcript(file_path, speaker, text):
         return False
     
 def split_summary_into_sections(markdown_text: str):
-    a = markdown_text.split("\n\n#### Section\n\n")[1:]
-    return a
-    # heading_lines = re.findall(r'^(#{1,6}\s+.+?)$', markdown_text, re.MULTILINE)
-    # if not heading_lines:
-    #     return "No headings found"
-    # heading_levels = [re.match(r'^(#+)', line).group(1) for line in heading_lines] # get levels
-    # level_counts = {}
-    # for level in heading_levels:
-    #     level_counts[level] = level_counts.get(level, 0) + 1
-    # sorted_levels = sorted(level_counts.items(), key=lambda x: x[1], reverse=True)
-    # target_level = sorted_levels[0][0]
-    # pattern = rf'^({target_level}\s+(.+?))\n([\s\S]*?)(?=^{target_level}|\Z)'
-    # sections = {}
-    # matches = re.finditer(pattern, markdown_text, re.MULTILINE)
-    # for match in matches:
-    #     heading_text = match.group(2).strip()
-    #     content = match.group(3).strip()
-    #     sections[heading_text] = content
-    # logger.info(sections)
-    # return sections
+    return markdown_text.split("\n\n#### Section\n\n")[1:]
 
 def prewarm(proc: JobProcess):
     try:

@@ -156,7 +156,7 @@ export default function Page() {
             <RoomAudioRenderer />
             <NoAgentNotification state={agentState} />
           </LiveKitRoom>
-          <p className="text-white/60 text-center"><i>{mode}</i></p>
+          <p className="text-white/60 text-center"><i>{mode.includes("User Led") ? "SQUARE mode" : (mode.includes("AGENT") ? "CIRCLE Mode" : "TRIANGLE Mode")}</i></p>
         </div>
       )}
     </main>
