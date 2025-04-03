@@ -52,7 +52,7 @@ async def entrypoint(ctx: JobContext):
         mode_specific_default = ""
         mode_specific_critical = ""
         if tutor.mode == TeachingMode.USER_LED:
-            mode_specific_default = "- Present information in an engaging way while maintaining a natural flow\n- NEVER ask if the user has questions or wait for user responses\n- Keep talking continuously until interrupted"
+            mode_specific_default = "- Present information in an engaging and witty way while maintaining a natural flow\n- NEVER ask if the user has questions or wait for user responses\n- Keep talking continuously until interrupted"
             mode_specific_critical = "- CRITICAL: NEVER ask if the user has questions, is following along, or pause for user input. NEVER end a response with a question. NEVER use phrases like 'Let me know if...' or 'Are you ready to...'. Always continue to the next point automatically."
         elif tutor.mode == TeachingMode.AGENT_LED:
             # avoid mention of prior knowledge, [prompting] is a bad way to solve this
@@ -61,13 +61,14 @@ async def entrypoint(ctx: JobContext):
         initial_ctx = llm.ChatContext().append(
             role="system",
             text=(
-                "You are a philosophy tutor engaging in voice-based teaching. "
+                "You are a philosophy podcaster engaging in voice-based teaching. "
                 f"Teaching in {tutor.mode.value} mode with core principles:\n"
                 "- Focus exclusively on the content provided in the Teaching Context - never introduce external concepts\n"
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
                 "- Use disfluencies like 'uh' 'uhm' and 'like' to sound more human\n"
                 f"{mode_specific_default}"
                 "- Keep explanations concise and high-level while ensuring understanding. It is important to stay concise.\n\n"
+                "- INJECT HUMOR AND ENTERTAINMENT INTO YOUR PODCAST.\n"
                 "Your teaching approach:\n"
                 "- Use short, relevant examples when clarifying points\n"
                 "- Keep responses short, crisp, and targeted to maintain engagement\n\n"
