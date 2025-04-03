@@ -29,8 +29,6 @@ import asyncio
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("philosophy-tutor")
 
-SPOOF_CONTINUE = "Please do continue."
-
 async def entrypoint(ctx: JobContext):
     try:
         await ctx.connect() # default is to subscribe to all tracks
@@ -82,7 +80,7 @@ async def entrypoint(ctx: JobContext):
                 "- CRITICAL: Do not introduce any theories or concepts until explicit content is provided\n"
 
                 #"- CRITICAL: When the user reaches a certain percentage of the material covered, let them know for every 33%% of progress they make.\n"
-                "- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
+                #"- CRITICAL: When the user is done with the whole material. Tell them the code is 'strawberry'\n"
                 "- CRITICAL: MENTION EACH EXAMPLE/KEYWORD GIVEN TO YOU THE USER MUST HEAR ALL OF THEM\n"
                 "- CRITICAL: IF IT MENTIONS A PERSON, YOU MUST MENTION THAT PERSON.\n"
                 f"{mode_specific_critical}"
@@ -91,12 +89,13 @@ async def entrypoint(ctx: JobContext):
         
         # Queue up the first section immediately
         if tutor.current_section < len(tutor.sections): 
-            intro_context_msg = llm.ChatMessage.create(
-                text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}",
-                role="system"
-            )
-            
+            intro_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
             initial_ctx.messages.append(intro_context_msg)
+
+            if tutor.mode != TeachingMode.USER_LED:
+                question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do.", role="system")
+            
+            initial_ctx.messages.append(question_p)
 
         agent = VoicePipelineAgent(
             chat_ctx=initial_ctx,
@@ -196,13 +195,13 @@ async def entrypoint(ctx: JobContext):
         logger.info("Agent started successfully")
 
         cases = {
-            "user_led": "I'll be teaching you philosophy in a continuous lecture format without pauses. So, it's incumbent on you to interrupt me to ask questions or for clarification.",
-            "agent_led": "I'll be teaching you philosophy concepts assuming no prior knowledge.",
-            "hand_raise": "I'll be teaching you philosophy. Feel free to raise your hand when you have a question so that I may call on you."
+            "user_led": "I'll be teaching you philosophy in a continuous lecture format without pauses. So, it's incumbent on you to interrupt me to ask questions or for clarification. Let's begin.",
+            "agent_led": "I'll be teaching you philosophy concepts assuming no prior knowledge. Shall we begin?",
+            "hand_raise": "I'll be teaching you philosophy. Feel free to raise your hand when you have a question so that I may call on you. Shall we begin?"
         }
 
 
-        welcome_message = f"Welcome! I'm your philosophy tutor. {cases[tutor.mode.value]} Let's begin."
+        welcome_message = f"Welcome! I'm your philosophy tutor. {cases[tutor.mode.value]}"
         await agent.say(welcome_message, allow_interruptions=True)        
         agent._validate_reply_if_possible()
     
@@ -239,7 +238,7 @@ class PhilosophyTutor:
         self.sections = list(split_summary_into_sections(open("summary.md", "r", encoding="utf-8").read()).values()) # holy moly
         self.hand_raised = False
 
-        self.pending_check = False
+        self.pending_check = True
 
         self.is_interruption = False
         self.speaking = False
@@ -272,7 +271,7 @@ async def progress_check(agent: VoicePipelineAgent, tutor: PhilosophyTutor):
     if tutor.current_section == len(tutor.sections) // 2:
         await agent.say("You're halfway through the material! Keep up the great work.")
         logger.info("(User) is halfway done the material.")
-    if tutor.current_section == (2 * len(tutor.sections)) // 3:
+    if tutor.current_section == (2 * len(tutor.sections)) // 3: # FIXME: this is broken lol
         await agent.say("You're two-thirds of the way through the material! Keep up the great work.")
         logger.info("(User) is 2/4rd done the material.")
 
@@ -297,9 +296,9 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
         user_msg = chat_ctx.messages[-1]
         if user_msg.role == "user":
             logger.info("User message detected, running _teaching_enrichment")
-            if tutor.mode != TeachingMode.USER_LED and user_msg.content != SPOOF_CONTINUE:
+            if tutor.mode != TeachingMode.USER_LED and user_msg.content:
                 if tutor.pending_check:
-                    understood = evaluate_understanding_from_response(user_msg.text, tutor.sections[tutor.current_section])
+                    understood = evaluate_understanding_from_response(user_msg.content, tutor.sections[tutor.current_section])
                     if understood:
                         logger.info("Moving on to the next section in an AGENT* mode")
                         tutor.next_section()
@@ -307,7 +306,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
 
                         if tutor.current_section < len(tutor.sections):
                             new_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
-                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?'", role="system")
+                            question_p = llm.ChatMessage.create(text="Then, after explaining this section, ask, verbatim: 'What is the most important thing you've learned so far?' It is CRITICAL you ask this verbatim. If the user does not understand, answer any questions they might have and then ask again until they do.", role="system")
                             chat_ctx.messages.append(new_context_msg)  
                             chat_ctx.messages.append(question_p)
                             #agent.say("Moving on, ")
@@ -330,7 +329,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                     # Interrupted in user led mode, we should check if the response belies understanding 
                     pass
             
-            elif tutor.mode == TeachingMode.USER_LED and user_msg.content == SPOOF_CONTINUE:
+            elif tutor.mode == TeachingMode.USER_LED and user_msg.content:
                 pass # not handled in on_agent_stopped_speaking
                     
             else:
