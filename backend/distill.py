@@ -18,8 +18,10 @@ def get_raw_data(material_path):
         return Exception(f"Could not find path {material_path}")
 
 def generate_summary(material_path):
-    content = "\n\n".join(get_raw_data(material_path)) # lol
+    content = get_raw_data(material_path) # lol
     print("Distilling from raw data...")
+
+
     LEARNING_OBJECTIVES = [
         "Identify sages (early philosophers) across historical traditions.",
         "Explain the connection between ancient philosophy and the origin of the sciences.",
@@ -36,31 +38,33 @@ def generate_summary(material_path):
         "Why is it necessary for philosophers to discard suppositions or assumptions that may be acceptable in other disciplines?"
     ]
     system_prompt = (
-        "You are a philosophy professor creating concise teaching material. "
-        "Generate a summary focused specifically on these learning objectives:\n" + 
-        "\n".join(f"- {obj}" for obj in LEARNING_OBJECTIVES) + 
-        "Content summarized must be structured in a way that answer questions like the example review questions:\n" + 
-        "\n".join(f"- {obj}" for obj in REVIEW_QUESTIONS) + 
-        "\n\nThese should serve to guide your summary making but do not mention them explitly. "
-        "Your summary should be comprehensive enough to teach from, but concise and "
-        "focused only on these objectives. Include key examples of sages from different "
-        "traditions, clear explanations of philosophy's connection to sciences, and the "
-        "diverse origins of philosophical thinking."
+        "You are a philosophy professor creating part of a podcast (should be a short paragraph in length) from a paragraph of the material. "
+        # "specifically focused specifically on these learning objectives:\n" + 
+        # "\n".join(f"- {obj}" for obj in LEARNING_OBJECTIVES) + 
+        # "\n\nThese should serve to guide your summary making but do not mention them explitly."
     )
-    response = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Here is the source material:\n\n{content}\n\nCreate a summary that addresses the learning objectives while not omiting any key concepts or ideas. Do not reference this task or call this a summary:"}
-        ],
-        model="gpt-4-turbo",
-        temperature=0.3,
-    )
+
+
+    with open("summary.md", "w", encoding="utf-8") as f:
+        f.write("### Philosophy\n\n")
+        for section in content:
+            f.write("#### Section\n\n")
+            
+
+            response = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Here is the paragraph:\n\n{section}\n\nDo not include an intro or outro, this content will be part of the middle of the podcast."}
+                ],
+                model="gpt-4-turbo",
+                temperature=0.3,
+            )
+            f.write(f"{response.choices[0].message.content}\n\n")
     
-    return response.choices[0].message.content
+
 
 def main():
-    with open("summary.md", "w", encoding="utf-8") as f:
-        f.write(generate_summary("material.md"))
+    generate_summary("material.md")
 
 if __name__ == "__main__":
     main()

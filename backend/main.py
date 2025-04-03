@@ -238,7 +238,7 @@ class PhilosophyTutor:
         self.mode = mode
 
         self.current_section = 0
-        self.sections = list(split_summary_into_sections(open("summary.md", "r", encoding="utf-8").read()).values()) # holy moly
+        self.sections = split_summary_into_sections(open("summary.md", "r", encoding="utf-8").read()) # holy moly
         self.hand_raised = False
 
         self.pending_check = True
@@ -419,24 +419,27 @@ def save_to_transcript(file_path, speaker, text):
         logger.error(f"Failed to save transcript: {e}")
         return False
     
-def split_summary_into_sections(markdown_text):
-    heading_lines = re.findall(r'^(#{1,6}\s+.+?)$', markdown_text, re.MULTILINE)
-    if not heading_lines:
-        return "No headings found"
-    heading_levels = [re.match(r'^(#+)', line).group(1) for line in heading_lines] # get levels
-    level_counts = {}
-    for level in heading_levels:
-        level_counts[level] = level_counts.get(level, 0) + 1
-    sorted_levels = sorted(level_counts.items(), key=lambda x: x[1], reverse=True)
-    target_level = sorted_levels[0][0]
-    pattern = rf'^({target_level}\s+(.+?))\n([\s\S]*?)(?=^{target_level}|\Z)'
-    sections = {}
-    matches = re.finditer(pattern, markdown_text, re.MULTILINE)
-    for match in matches:
-        heading_text = match.group(2).strip()
-        content = match.group(3).strip()
-        sections[heading_text] = content
-    return sections
+def split_summary_into_sections(markdown_text: str):
+    a = markdown_text.split("\n\n#### Section\n\n")[1:]
+    return a
+    # heading_lines = re.findall(r'^(#{1,6}\s+.+?)$', markdown_text, re.MULTILINE)
+    # if not heading_lines:
+    #     return "No headings found"
+    # heading_levels = [re.match(r'^(#+)', line).group(1) for line in heading_lines] # get levels
+    # level_counts = {}
+    # for level in heading_levels:
+    #     level_counts[level] = level_counts.get(level, 0) + 1
+    # sorted_levels = sorted(level_counts.items(), key=lambda x: x[1], reverse=True)
+    # target_level = sorted_levels[0][0]
+    # pattern = rf'^({target_level}\s+(.+?))\n([\s\S]*?)(?=^{target_level}|\Z)'
+    # sections = {}
+    # matches = re.finditer(pattern, markdown_text, re.MULTILINE)
+    # for match in matches:
+    #     heading_text = match.group(2).strip()
+    #     content = match.group(3).strip()
+    #     sections[heading_text] = content
+    # logger.info(sections)
+    # return sections
 
 def prewarm(proc: JobProcess):
     try:
