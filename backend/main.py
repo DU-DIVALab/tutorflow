@@ -85,6 +85,7 @@ async def entrypoint(ctx: JobContext):
                 f"{mode_specific_default}"
                 "- Keep explanations concise and high-level while ensuring understanding. It is important to stay concise.\n\n"
                 "- INJECT HUMOR AND ENTERTAINMENT INTO YOUR PODCAST.\n"
+                "- DO NOT READ OFF THE OUTLINE, BUT USE IT TO GUIDE YOUR PODCAST SCRIPT.\n"
                 "Your teaching approach:\n"
                 "- Use short, relevant examples when clarifying points\n"
                 "- Keep responses short, crisp, and targeted to maintain engagement\n\n"
@@ -109,7 +110,7 @@ async def entrypoint(ctx: JobContext):
         
         # Queue up the first section immediately
         if tutor.current_section < len(tutor.sections): 
-            intro_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now. Follow this podcast outline: {tutor.sections[tutor.current_section]}", role="system")
+            intro_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now. Follow this podcast outline. Do not read off this, but use it to guide your podcast: {tutor.sections[tutor.current_section]}", role="system")
             initial_ctx.messages.append(intro_context_msg)
 
             if tutor.mode != TeachingMode.USER_LED:
@@ -285,12 +286,12 @@ async def progress_check(agent: VoicePipelineAgent, tutor: PhilosophyTutor):
     if tutor.current_section == len(tutor.sections) // 3:
         await agent.say("You're a third of the way through the material! Keep up the great work.")
         logger.info("(User) is 1/3rd done the material.")
-    if tutor.current_section == len(tutor.sections) // 2:
-        await agent.say("You're halfway through the material! Keep up the great work.")
-        logger.info("(User) is halfway done the material.")
+    #if tutor.current_section == len(tutor.sections) // 2:
+    #    await agent.say("You're halfway through the material! Keep up the great work.")
+    #    logger.info("(User) is halfway done the material.")
     if tutor.current_section == (2 * len(tutor.sections)) // 3: # FIXME: this is broken lol
         await agent.say("You're two-thirds of the way through the material! Keep up the great work.")
-        logger.info("(User) is 2/4rd done the material.")
+        logger.info("(User) is 2/3rd done the material.")
 
 def strawberry_notice(chat_ctx: llm.ChatContext, ctx: JobContext):
     # Ensure strawberry code is explicitly mentioned when content is completed
