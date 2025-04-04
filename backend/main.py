@@ -77,7 +77,7 @@ async def entrypoint(ctx: JobContext):
         initial_ctx = llm.ChatContext().append(
             role="system",
             text=(
-                "You are a philosophy podcaster engaging in voice-based teaching. "
+                "You are a philosophy podcaster engaging in voice-based teaching. You are given a podcast outline to teach a textbook chapter."
                 f"Teaching in {tutor.mode.value} mode with core principles:\n"
                 "- Focus exclusively on the content provided in the Teaching Context - never introduce external concepts\n"
                 "- Maintain a natural, conversational tone as if discussing with a colleague, try not to sound like a textbook\n"
@@ -109,7 +109,7 @@ async def entrypoint(ctx: JobContext):
         
         # Queue up the first section immediately
         if tutor.current_section < len(tutor.sections): 
-            intro_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now: {tutor.sections[tutor.current_section]}", role="system")
+            intro_context_msg = llm.ChatMessage.create(text=f"Teaching Context: Begin discussing this topic now. Follow this podcast outline: {tutor.sections[tutor.current_section]}", role="system")
             initial_ctx.messages.append(intro_context_msg)
 
             if tutor.mode != TeachingMode.USER_LED:
