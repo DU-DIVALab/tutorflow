@@ -319,6 +319,7 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                     if understood:
                         agent.chat_ctx.messages.append( llm.ChatMessage.create(text=f"Section Completed", role="system"))
                         logger.info("Moving on to the next section in an AGENT* mode")
+                        logger.info(f"We are in section {tutor.current_section}/{len(tutor.sections)}")
                         tutor.next_section()
                         await progress_check(agent, tutor)
 
@@ -367,22 +368,17 @@ def evaluate_understanding_from_response(message_history):
     """ 'demonstrates awareness of their own knowledge' is the language used in that paepr [sic] """
 
     # optimization lol
-    flag = False
     for message in reversed(message_history):
         if message.role != "user" and message.role != "system": # lol the user cant skip just by saing this
                                                                 # oops cant be system either
             content = message.content.lower()
             if ("you" in content) and ("seem" in content) and ("understood" in content or "understand" in content or "grasp" in content):
-                flag = True
                 logger.info("Moving on to next section!")
-            # if not flag:
-            #     pass
+                return True
         if message.role == "system":
             if message.content == "Section Completed":
                 return False
 
-    return flag
-    
 #     response = client.chat.completions.create(
 #         messages=[
 #             {"role": "system", "content": """You are an educational evaluation assistant built to evaluate if a user has understood content or have demonstrated awareness of their own knowledge.
