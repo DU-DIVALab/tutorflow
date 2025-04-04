@@ -332,8 +332,9 @@ async def _teaching_enrichment(agent: VoicePipelineAgent, chat_ctx: llm.ChatCont
                         else:
                             strawberry_notice(chat_ctx, ctx)
                     else:
-                        # not understood
-                        pass
+                        # not understood (contingency)
+                        if tutor.current_section >= len(tutor.sections):
+                            strawberry_notice(chat_ctx, ctx)
                 else:
                     pass # never happens
 
