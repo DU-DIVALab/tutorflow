@@ -1,19 +1,5 @@
 ## Tutorflow
 
-A minimalistic frontend for interacting with [LiveKit Agents](https://docs.livekit.io/agents).
-
-![Screenshot of the frontend application.](/.github/assets/frontent-screenshot.jpeg)
-
-
-```
-if "SQUARE" in room_name:
-    mode = TeachingMode.USER_LED
-elif "CIRCLE" in room_name:
-    mode = TeachingMode.AGENT_LED
-elif "TRIANGLE" in room_name:
-    mode = TeachingMode.HAND_RAISE
-```
-
 ## Setup
 
 You'll need to make sure you have Git, Python, and NodeJS installed! Clone the repository with: `git clone https://github.com/DU-DIVALab/tutorflow` and ensure its up to date with `git pull`
